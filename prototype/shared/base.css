@@ -1,0 +1,19 @@
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#070b14;color:#e9e3d4;font-family:Inter,system-ui,sans-serif}
+.proto-switch{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9999;display:flex;align-items:center;gap:10px;background:#ff2d75;color:#fff;font:600 13px Inter,sans-serif;padding:6px 8px;border-radius:999px;box-shadow:0 6px 24px rgba(0,0,0,.5)}
+.proto-switch button{all:unset;cursor:pointer;width:28px;height:28px;display:grid;place-items:center;border-radius:50%;background:rgba(255,255,255,.18);font-size:18px}
+.proto-switch span{min-width:170px;text-align:center}
+.toy{border-radius:12px;overflow:hidden;max-width:100%}
+.toy canvas{display:block;width:100%;height:auto;cursor:crosshair;touch-action:none}
+.toy-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px;font:400 12px Inter,sans-serif}
+.toy-bar button{all:unset;cursor:pointer;padding:6px 12px;border-radius:999px;font-weight:600}
+.toy-dark{background:#0b1120;border:1px solid rgba(242,196,107,.25)}
+.toy-dark .toy-bar button{background:rgba(242,196,107,.15);color:#f2c46b}
+.toy-dark .toy-out{color:#b9c2d8}
+.toy-paper{background:#efe6d2;border:1px solid #cdbf9e}
+.toy-paper .toy-bar button{background:#3b3326;color:#efe6d2}
+.toy-paper .toy-out{color:#3b3326}
+.orn{display:block;height:14px;background:
+ repeating-linear-gradient(90deg,transparent 0 6px,currentColor 6px 8px,transparent 8px 14px);opacity:.35;-webkit-mask:radial-gradient(circle at 50% 50%,#000 40%,transparent 41%) 0 0/14px 14px;}
+
+.kz{font-family:'Noto Serif',serif!important}
