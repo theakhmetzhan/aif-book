@@ -7,7 +7,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import QRCode from 'qrcode';
 import { T } from './theme.js';
 import { Book } from './book.js';
-import { SHEETS, SPREADS, BOOK_URL, TITLE_TXT, FACES } from './pages.js';
+import { SHEETS, SPREADS, BOOK_URL, FACES } from './pages.js';
 import { buildScene, installDarkness, roomEnvironment, DESK_Y, BOARD } from './scene.js';
 import { CameraRig } from './controls.js';
 import { Ambience } from './audio.js';
@@ -57,10 +57,10 @@ async function start() {
   room.pickables.push(book.group);
 
   // ---------- camera ----------
-  const cam = new THREE.PerspectiveCamera(+(qs.get('fov') || 38), 1, 0.5, 900);
+  const cam = new THREE.PerspectiveCamera(+(qs.get('fov') || 38), 1, 2, 900);
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
   const pickAt = (x, y, objs) => { ndc.set(x / innerWidth * 2 - 1, -(y / innerHeight) * 2 + 1); ray.setFromCamera(ndc, cam); return ray.intersectObjects(objs, true)[0] || null; };
-  const rig = new CameraRig(cam, canvas, { pick: (x, y) => pickAt(x, y, room.pickables)?.point || null });
+  const rig = new CameraRig(cam, canvas, { pick: (x, y) => pickAt(x, y, room.pickables)?.point || null, limits: { rMax: 500 } }); // far enough for a phone to fit the whole board
   const home = () => {
     const a = innerWidth / innerHeight;
     if (a < 0.8) return { target: new THREE.Vector3(0, 6, -3), r: 50 / Math.max(0.42, a), th: 0, ph: 1.24 };
@@ -75,7 +75,8 @@ async function start() {
     book: () => { const ri = Math.round(target), shut = ri === 0 || ri === N, a = innerWidth / innerHeight;
       const hw = shut ? 8.6 : a < 0.8 ? 8.4 : 16.2; const tx = !shut && a < 0.8 ? (ri === 1 ? 7.2 : -7.2) : 0; // a phone reads one page at a time: the text page
       return { target: new THREE.Vector3(tx, DESK_Y + 2.2, 1.2), r: fitR(hw, 12.5), th: 0, ph: 0.6 }; },
-    board: () => ({ target: new THREE.Vector3(0, BOARD.y0 + BOARD.h / 2, BOARD.z), r: fitR(BOARD.w / 2 + 4, BOARD.h / 2 + 6), th: 0, ph: 1.5 }),
+    // the whole setup: the board and the desk in front of it, seen from a step back and a little above
+    room: () => ({ target: new THREE.Vector3(0, 42, -4), r: fitR(BOARD.w / 2 + 12, 65), th: -0.05, ph: 1.34 }),
   };
   const goView = (name, instant = false) => { view = name; userMoved = false; instant ||= reduced; const h = views[name](); rig.home = name === 'desk' ? h.target.clone() : rig.home; rig.set(h.target, h, instant); markView(); unlock(); };
   let markView = () => {};
@@ -118,20 +119,14 @@ async function start() {
   const hud = document.querySelector('#hud');
   let soundOn = true; try { soundOn = localStorage.getItem('ev-sound') !== 'off'; } catch {}
   hud.innerHTML = `
-    <div class="brand"><span class="t">${TITLE_TXT}</span><span class="s">A Casebook of Artificial Intelligence</span></div>
     <button class="snd" aria-pressed="${soundOn}" title="Sound (M)"><span class="ic"></span><span class="lb">${soundOn ? 'Sound on' : 'Sound off'}</span></button>
-    <nav class="where" aria-label="Pages"><button class="nav prev" aria-label="Previous page">‹</button><span class="label" aria-live="polite"></span><button class="nav next" aria-label="Next page">›</button></nav>
-    <div class="dots" role="tablist">${Array.from({ length: N + 1 }, (_, i) => `<button role="tab" aria-label="${SPREADS[i]}" data-p="${i}"></button>`).join('')}</div>
-    <div class="views" role="group" aria-label="View"><button data-v="desk" title="The whole desk (H)">Desk</button><button data-v="book" title="Lean over the book to read (R)">Read</button><button data-v="board" title="The case board (B)">Board</button></div>
+    <div class="views" role="group" aria-label="View"><button data-v="desk" title="The desk (H)">Desk</button><button data-v="book" title="Lean over the book to read (R)">Read</button><button data-v="room" title="Step back: the board and the desk (O)">Room</button></div>
     <div class="hint">${mobile ? 'Drag to look around · pinch to come closer · tap a page to turn it' : 'Drag to look around · scroll to come closer · click a page or press ← → to turn it'}</div>`;
-  const label = hud.querySelector('.label'), dots = [...hud.querySelectorAll('.dots button')], hint = hud.querySelector('.hint');
-  const prevB = hud.querySelector('.prev'), nextB = hud.querySelector('.next'), sndB = hud.querySelector('.snd');
-  prevB.onclick = () => go(-1); nextB.onclick = () => go(1);
+  const hint = hud.querySelector('.hint'), sndB = hud.querySelector('.snd');
   const viewB = [...hud.querySelectorAll('.views button')];
   viewB.forEach(b => b.onclick = () => b.dataset.v === 'desk' ? (goHome(false), unlock()) : goView(b.dataset.v));
   markView = () => viewB.forEach(b => b.setAttribute('aria-pressed', String(!userMoved && b.dataset.v === view)));
   markView();
-  dots.forEach(d => d.onclick = () => goto(+d.dataset.p));
   let hinted = false; function hideHint() { if (!hinted) { hinted = true; hint.classList.add('off'); } }
   setTimeout(hideHint, 14000);
 
@@ -163,7 +158,7 @@ async function start() {
     else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(-1); }
     else if (e.key === 'Home') goto(0); else if (e.key === 'End') goto(N);
     else if (e.key === 'h' || e.key === 'H' || e.key === 'Escape') goHome(false);
-    else if (e.key === 'r' || e.key === 'R') goView('book'); else if (e.key === 'b' || e.key === 'B') goView('board');
+    else if (e.key === 'r' || e.key === 'R') goView('book'); else if (e.key === 'o' || e.key === 'O') goView('room');
     else if (e.key === '+' || e.key === '=') { rig.zoom(0.8, innerWidth / 2, innerHeight / 2); userMoved = true; }
     else if (e.key === '-' || e.key === '_') { rig.zoom(1.25); userMoved = true; }
     else if (e.key === 'm' || e.key === 'M') setSound(sndB.getAttribute('aria-pressed') !== 'true');
@@ -172,7 +167,7 @@ async function start() {
   });
 
   // ---------- loop ----------
-  const clock = new THREE.Timer(); let first = true, lastSide = 0, shadowTick = 0, calm = 0; const ft = [];
+  const clock = new THREE.Timer(); let first = true, lastSide = 0, shadowTick = 0, calm = 0, shown = -1; const ft = [];
   const freeze = !!qs.get('freeze'), tFix = qs.get('t') ? +qs.get('t') : null; room.freeze = freeze;
   if (freeze) { p = target = +(qs.get('p') ?? 0); }
   function frame() {
@@ -191,9 +186,9 @@ async function start() {
     book.group.position.x = -book.centerX(p);
     rig.update(first ? 1 : dt);
     room.tick(el, dt, cam);
-    if (room.lampK) audio.lamp(room.lampK); audio.update(dt);
+    audio.update(dt);
     const ri = Math.round(target);
-    if (label.textContent !== SPREADS[ri]) { label.textContent = SPREADS[ri]; readSpread(ri); dots.forEach((d, i) => { d.classList.toggle('on', i === ri); d.setAttribute('aria-selected', i === ri); }); prevB.disabled = ri === 0; nextB.disabled = ri === N; }
+    if (ri !== shown) { shown = ri; readSpread(ri); }
     film.uniforms.uT.value = el;
     // shadows: every frame while anything that casts them moves, otherwise a few times a second for the drifting paper
     const busy = Math.abs(target - p) > 1e-4 || Math.abs(pv) > 1e-4 || Math.abs(hoverK) > 1e-3 && Math.abs(hoverK - (Math.abs(target - p) < 0.02 ? hover : 0)) > 1e-3;
@@ -201,7 +196,7 @@ async function start() {
     composer.render(dt);
     // keep it smooth: lower the resolution while frames run long, raise it again when there is room
     if (!freeze && !qs.get('dpr')) { ft.push(clock.getDelta() * 0 + dt); if (ft.length > 45) { const a = ft.reduce((x, y) => x + y, 0) / ft.length; ft.length = 0;
-      if (a > 0.024 && dpr > 1) { dpr = Math.max(1, dpr - 0.25); resize(); } else if (a < 0.0175 && dpr < dprMax && ++calm > 4) { dpr = Math.min(dprMax, dpr + 0.25); resize(); calm = 0; } } }
+      if (a > 0.024 && dpr > 1) { dpr = Math.max(1, dpr - 0.25); resize(); } else if (a < 0.0125 && dpr < dprMax && ++calm > 4) { dpr = Math.min(dprMax, dpr + 0.25); resize(); calm = 0; } } }
     first = false;
     requestAnimationFrame(frame);
   }

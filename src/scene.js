@@ -51,7 +51,6 @@ export async function buildScene(scene, renderer, { mobile, card }) {
   const board = new THREE.Group(); scene.add(board); evidenceBoard(board, mobile, card, out);
   if (kit) placeProps(scene, out, kit); else props(scene, out);
   lights(scene, renderer, mobile, out);
-  dust(scene, mobile, out);
   return out;
 }
 
@@ -135,8 +134,17 @@ function evidenceBoard(group, mobile, card, out) {
   const back = new THREE.Mesh(new THREE.BoxGeometry(w, h, 2.4), std({ color: '#3a2a1a' })); back.position.set(0, cy, z - 1.25); group.add(back);
 
   // pinned items. Each: [x, y (board-local centre, from bottom-left), w, h, rot, draw, opts]
-  const anchors = {};
+  // Papers that overlap are stacked: each sits one layer above the highest one it covers, so their waviness, curl and
+  // flutter never cross. Fluttering notes bend outward below their pin; the part above the pin stays on the board.
+  const anchors = {}, placed = [], LAYER = 0.32;
   const pr = rng(101);
+  const footprint = (x, y, iw, ih, rot, pinAt, pad = 0.3) => { const c = Math.cos(rot), sn = Math.sin(rot), px = x + pinAt[0], py = y + pinAt[1];
+    return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([u, v]) => { const lx = -pinAt[0] + u * (iw / 2 + pad), ly = -pinAt[1] + v * (ih / 2 + pad); return [px + c * lx - sn * ly, py + sn * lx + c * ly]; }); };
+  const sat = (A, Bc) => { for (const Q of [A, Bc]) for (let i = 0; i < 4; i++) { const [x0, y0] = Q[i], [x1, y1] = Q[(i + 1) % 4], nx = y1 - y0, ny = x0 - x1;
+    const pa = A.map(([x, y]) => x * nx + y * ny), pb = Bc.map(([x, y]) => x * nx + y * ny); if (Math.max(...pa) < Math.min(...pb) || Math.max(...pb) < Math.min(...pa)) return false; } return true; };
+  const inside = (Q, x, y) => { let s0 = 0; for (let i = 0; i < 4; i++) { const [x0, y0] = Q[i], [x1, y1] = Q[(i + 1) % 4], c = (x1 - x0) * (y - y0) - (y1 - y0) * (x - x0); if (c !== 0) { if (s0 && Math.sign(c) !== s0) return false; s0 = Math.sign(c); } } return true; };
+  // how far the paper stands off the cork at a board point (cm), for strings to lie over
+  const paperAt = (x, y) => placed.reduce((h, q) => inside(q.fp, x, y) ? Math.max(h, q.layer * LAYER + 0.12 + 0.25 + q.lift) : h, 0);
   const item = (key, x, y, iw, ih, rot, draw, { color = '#efe3c8', pinAt = [0, ih / 2 - 1.2], flutter = false, curl = 0.0, ppc = mobile ? 16 : 26, pins = null, tex = null } = {}) => {
     let map = tex;
     if (!map) {
@@ -147,18 +155,35 @@ function evidenceBoard(group, mobile, card, out) {
       const e = ig.createRadialGradient(ic.width / 2, ic.height / 2, Math.min(ic.width, ic.height) * 0.3, ic.width / 2, ic.height / 2, Math.max(ic.width, ic.height) * 0.75); e.addColorStop(0, 'rgba(90,60,20,0)'); e.addColorStop(1, 'rgba(90,60,20,.16)'); ig.fillStyle = e; ig.fillRect(0, 0, ic.width, ic.height);
       map = ctex(ic);
     }
-    const geo = new THREE.PlaneGeometry(iw, ih, 10, 10);
+    const geo = new THREE.PlaneGeometry(iw, ih, 10, flutter ? 24 : 10);
     const p = geo.attributes.position; const ph = pr() * 6;
-    for (let i = 0; i < p.count; i++) { const xx = p.getX(i), yy = p.getY(i); let zz = Math.sin(xx * 0.35 + ph) * Math.sin(yy * 0.3) * 0.06; if (curl) zz += Math.max(0, -yy / ih - 0.2) ** 2 * curl; zz += (Math.abs(xx) / iw * 2) ** 3 * 0.12 * (1 - Math.min(1, Math.abs(yy - pinAt[1] + ih / 2) / ih)); p.setZ(i, zz); }
+    for (let i = 0; i < p.count; i++) { const xx = p.getX(i), yy = p.getY(i); let zz = 0.06 + Math.sin(xx * 0.35 + ph) * Math.sin(yy * 0.3) * 0.06; if (curl) zz += Math.max(0, -yy / ih - 0.2) ** 2 * curl; zz += (Math.abs(xx) / iw * 2) ** 3 * 0.12 * (1 - Math.min(1, Math.abs(yy - pinAt[1] + ih / 2) / ih)); p.setZ(i, zz); }
     geo.computeVertexNormals();
     const m = new THREE.Mesh(geo, std({ map, roughness: 0.9, side: THREE.DoubleSide }));
+    const fp = footprint(x, y, iw, ih, rot, pinAt);
+    const layer = placed.reduce((l, q) => sat(fp, q.fp) ? Math.max(l, q.layer + 1) : l, 0);
+    placed.push({ key, fp, layer, lift: curl * 0.64 + 0.12 });
     const holder = new THREE.Group();
-    holder.position.set(x - w / 2 + pinAt[0], y + y0 + pinAt[1], z + 0.12 + pr() * 0.1); holder.rotation.z = rot;
+    holder.position.set(x - w / 2 + pinAt[0], y + y0 + pinAt[1], z + 0.12 + layer * LAYER + pr() * 0.02); holder.rotation.z = rot;
     m.position.set(-pinAt[0], -pinAt[1], 0); holder.add(m); shadow(holder, true, true); group.add(holder);
     const pinList = pins || [pinAt];
     for (const [px, py] of pinList) { const v = new THREE.Vector3(px - pinAt[0], py - pinAt[1], 0).applyAxisAngle(new THREE.Vector3(0, 0, 1), rot); group.add(boardPin(new THREE.Vector3(holder.position.x + v.x, holder.position.y + v.y, holder.position.z + 0.15), pr)); }
     anchors[key] = new THREE.Vector3(holder.position.x, holder.position.y, holder.position.z + 0.2);
-    if (flutter) { const ph2 = pr() * 6; ticks.push(t => { holder.rotation.x = -(Math.max(0, Math.sin(t * 0.9 + ph2)) ** 6) * 0.35 - Math.sin(t * 7 + ph2) * 0.008; }); }
+    if (flutter) {
+      // a draught lifts the free end now and then; the paper curls from the pin line down (arc length is kept)
+      const ph2 = pr() * 6, base = Float32Array.from(p.array), pinY = pinAt[1], rows = new Map(); let acc = 1;
+      ticks.push((t, dt) => {
+        acc += dt; if (acc < 1 / 30 || out.freeze) return; acc = 0;
+        const a = (Math.max(0, Math.sin(t * 0.9 + ph2)) ** 6) * 0.38 + (0.5 + 0.5 * Math.sin(t * 7 + ph2)) * 0.012;
+        rows.clear();
+        for (let i = 0; i < p.count; i++) {
+          const yy = base[i * 3 + 1], d = pinY - yy; let dz = 0, dy = 0;
+          if (d > 0) { let o = rows.get(yy); if (!o) { o = [0, 0]; for (let s0 = 0, n = Math.ceil(d / 0.1), h = d / n; s0 < n; s0++) { const th = a * Math.min(1, (s0 + 0.5) * h / 2.2); o[0] += Math.sin(th) * h; o[1] += (1 - Math.cos(th)) * h; } rows.set(yy, o); } dz = o[0]; dy = o[1]; }
+          p.setY(i, yy + dy); p.setZ(i, base[i * 3 + 2] + dz);
+        }
+        p.needsUpdate = true; geo.computeVertexNormals();
+      });
+    }
     return holder;
   };
 
@@ -170,7 +195,7 @@ function evidenceBoard(group, mobile, card, out) {
     g.fillStyle = T.accent; g.fillText(sub, x0, H / 2 + 0.5 * p);
   }, { pinAt: [0, 2.4] });
   // case cards I–X
-  const casePos = [[22, 57], [45, 60], [68, 56], [92, 60], [116, 57], [24, 35], [48, 38], [72, 34], [96, 38], [122, 35]];
+  const casePos = [[22, 57], [45, 60], [68, 56], [92, 60], [116, 57], [24, 35], [48, 38], [72, 34], [96, 38], [121, 39]];
   CASES.forEach(([rn, t, s, p], i) => {
     const [x, y] = casePos[i]; const done = p !== undefined;
     item('c' + i, x, y, 17, 10.5, (Math.sin(i * 7.1) * 0.05), (g, q, W, H) => {
@@ -239,21 +264,23 @@ function evidenceBoard(group, mobile, card, out) {
     g.fillStyle = opts.ink || '#1d1b18'; g.font = `400 ${1.55 * p}px ${HAND}`; lines.forEach((l, i) => g.fillText(l, 0.8 * p, (3.2 + i * 1.75) * p));
   }, { color: col, pinAt: [0, 3.6], curl: opts.curl ?? 0.6, flutter: opts.flutter });
   sticky('n1', 31, 13, 0.06, ['verify every', 'number in', 'Python ✓'], '#e8d57a');
-  sticky('n3', 87, 76, 0.04, ['card on the', 'board → test', 'QR on a phone!'], '#e8d57a', { flutter: true });
-  sticky('n4', 108, 76, -0.03, ['explain each', 'term the first', 'time it appears'], '#e3b08a');
+  sticky('n3', 87, 76, 0.04, ['card on the', 'board → test', 'QR on a phone!'], '#e8d57a'); // strings hold this one down
+  sticky('n4', 108, 76, -0.03, ['explain each', 'term the first', 'time it appears'], '#e3b08a', { flutter: true });
   sticky('n6', 60, 77, -0.05, ['eye level =', 'the story;', 'above = the text'], '#d9c08a', { flutter: true });
-  // the 16:9 presentation card, printed and pinned at both top corners
+  // the 16:9 presentation card, printed and pinned at both top corners, in the clear corner below Case X
   if (card) {
     const cw = 32, ch = 18;
     const t = ctex(card); t.anisotropy = 16;
-    item('card', 129, 23, cw, ch, 0.012, null, { tex: t, pinAt: [0, ch / 2 - 1.1], pins: [[-cw / 2 + 1.2, ch / 2 - 1.1], [cw / 2 - 1.2, ch / 2 - 1.1]] });
+    item('card', 129, 17.5, cw, ch, 0.012, null, { tex: t, pinAt: [0, ch / 2 - 1.1], pins: [[-cw / 2 + 1.2, ch / 2 - 1.1], [cw / 2 - 1.2, ch / 2 - 1.1]] });
   }
 
   // red strings: the case chain, then cards to their sketches and notes
   const chain = []; for (let i = 0; i < 9; i++) chain.push(['c' + i, 'c' + (i + 1)]);
   const extra = [['c1', 'sk1'], ['c1', 'map'], ['c2', 'sk2'], ['c0', 'sk3'], ['head', 'n3'], ['c4', 'cal'], ['rubric', 'n1'], ['c0', 'w0'], ['c1', 'w1'], ['c2', 'w2'], ['n3', 'card']];
-  for (const [a, b] of [...chain, ...extra]) if (anchors[a] && anchors[b]) group.add(boardString(anchors[a], anchors[b]));
+  for (const [a, b] of [...chain, ...extra]) if (anchors[a] && anchors[b]) group.add(boardString(anchors[a], anchors[b], (x, y) => z + paperAt(x + w / 2, y - y0)));
   pinMeshes(group);
+  out.boardLayout = placed.map(q => ({ key: q.key, layer: q.layer, fp: q.fp }));
+  for (let i = 0; i < placed.length; i++) for (let k = i + 1; k < placed.length; k++) if (sat(placed[i].fp, placed[k].fp)) console.info(`[board] ${placed[k].key} lies over ${placed[i].key}`);
 }
 // push pins: one instanced mesh per colour
 const PIN_COLS = ['#a8231b', '#b8892f', '#2c3956', '#d8d0bd'], pinList = [];
@@ -266,17 +293,22 @@ function pinMeshes(group) {
   const geo = new THREE.LatheGeometry([[0, 0], [0.42, 0], [0.42, 0.12], [0.3, 0.2], [0.26, 0.55], [0.58, 0.68], [0.6, 0.86], [0.5, 0.95], [0, 0.98]].map(([x, y]) => new THREE.Vector2(x, y)), 24);
   PIN_COLS.forEach((col, k) => {
     const mine = pinList.filter(q => q[0] === k); if (!mine.length) return;
-    const im = new THREE.InstancedMesh(geo, new THREE.MeshPhysicalMaterial({ color: col, roughness: 0.28, clearcoat: 0.8, clearcoatRoughness: 0.15 }), mine.length);
-    mine.forEach(([, m], i) => im.setMatrixAt(i, m)); im.castShadow = im.receiveShadow = true; group.add(im);
+    // glossy enough to read as plastic, rough enough that a 4 px cap never sparkles as the camera moves
+    const im = new THREE.InstancedMesh(geo, new THREE.MeshPhysicalMaterial({ color: col, roughness: 0.42, clearcoat: 0.35, clearcoatRoughness: 0.32 }), mine.length);
+    mine.forEach(([, m], i) => im.setMatrixAt(i, m)); im.computeBoundingSphere(); im.castShadow = true; im.receiveShadow = false; group.add(im);
   });
 }
-// a string between two board pins that sags and sways a little in the draft
-function boardString(a, b) {
+// a string between two board pins: wound on each pin's shaft under the cap, lying over any paper it crosses, sagging a
+// little and swaying in the draught (outward only, never into the paper)
+function boardString(a0, b0, surfZ) {
+  // start at the shaft's surface, not its axis, so strings sharing a pin never overlap each other
+  const dir = b0.clone().sub(a0).setZ(0).normalize(), a = a0.clone().addScaledVector(dir, 0.3), b = b0.clone().addScaledVector(dir, -0.3);
   const pts = []; const L = a.distanceTo(b);
-  for (let i = 0; i <= 24; i++) { const t = i / 24; const p = a.clone().lerp(b, t); p.y -= Math.sin(Math.PI * t) * L * 0.035; p.z += 0.75 + Math.sin(Math.PI * t) * 0.5; pts.push(p); }
+  for (let i = 0; i <= 24; i++) { const t = i / 24; const p = a.clone().lerp(b, t); p.y -= Math.sin(Math.PI * t) * L * 0.035; p.z = Math.max(p.z + 0.35 + Math.sin(Math.PI * t) * 0.25, surfZ(p.x, p.y) + 0.15); pts.push(p); }
+  for (let k = 0; k < 2; k++) for (let i = 1; i < 24; i++) pts[i].z = Math.max(pts[i].z, (pts[i - 1].z + pts[i + 1].z) / 2); // no kinks where it climbs onto a paper
   const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, 0.1, 6, false);
   const mat = std({ color: T.string, roughness: 0.75 }); const u = { t: { value: 0 }, ph: { value: (L * 7.31) % 6 }, amp: { value: Math.min(0.6, L * 0.008) } };
-  mat.onBeforeCompile = sh => { Object.assign(sh.uniforms, { uT: u.t, uPh: u.ph, uAmp: u.amp }); sh.vertexShader = 'uniform float uT, uPh, uAmp;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n float s = sin(3.14159 * uv.x); transformed.y += sin(uT * 0.8 + uPh) * uAmp * s; transformed.z += sin(uT * 0.55 + uPh * 1.7) * uAmp * 0.6 * s;'); };
+  mat.onBeforeCompile = sh => { Object.assign(sh.uniforms, { uT: u.t, uPh: u.ph, uAmp: u.amp }); sh.vertexShader = 'uniform float uT, uPh, uAmp;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n float s = sin(3.14159 * uv.x); transformed.y += sin(uT * 0.8 + uPh) * uAmp * s; transformed.z += (0.5 + 0.5 * sin(uT * 0.55 + uPh * 1.7)) * uAmp * 0.6 * s;'); };
   ticks.push(t => { u.t.value = t; });
   const m = new THREE.Mesh(geo, mat); m.castShadow = true; return m;
 }
@@ -297,7 +329,7 @@ function props(scene, out) {
   shadow(loose); scene.add(loose);
   add(deskClock(), 52, -32, -0.45); out.positions.clock = new THREE.Vector3(52, D + 6, -32);
   add(legalPad(), -48, -18, 0.22);
-  out.positions.lamp = out.bulb.clone(); out.positions.book = new THREE.Vector3(0, 2, 0); out.positions.window = WINDOW.clone(); out.positions.radiator = new THREE.Vector3(-150, -50, 10);
+  out.positions.lamp = out.bulb.clone(); out.positions.book = new THREE.Vector3(0, 2, 0); out.positions.window = WINDOW.clone();
 }
 // ---------------- props (props.js) ----------------
 // Each prop's origin is the centre of its footprint at its base. A prop sits either wholly on the blotter or wholly on the
@@ -364,7 +396,7 @@ function placeProps(scene, out, kit) {
   const clk = out.props.clock; clk.updateMatrixWorld(true);
   out.positions.clock = clk.userData.face ? clk.localToWorld(clk.userData.face.clone()) : clk.position.clone().add(new THREE.Vector3(0, 8, 0));
   out.positions.mug = so.clone(); out.positions.lamp = bulb.clone(); out.positions.book = new THREE.Vector3(0, 2, 0);
-  out.positions.window = WINDOW.clone(); out.positions.radiator = new THREE.Vector3(-150, -50, 10);
+  out.positions.window = WINDOW.clone();
   out.pickables.push(...Object.values(out.props));
 }
 function lathe(points, mat, seg = 48) { return new THREE.Mesh(new THREE.LatheGeometry(points.map(([x, y]) => new THREE.Vector2(x, y)), seg), mat); }
@@ -478,81 +510,130 @@ function lights(scene, renderer, mobile, out) {
   lamp.target.position.set(3, 0, -3); lamp.castShadow = true;
   lamp.shadow.mapSize.set(smap, smap); lamp.shadow.bias = -0.00015; lamp.shadow.normalBias = 0.02; lamp.shadow.radius = 5; lamp.shadow.camera.near = 2; lamp.shadow.camera.far = 170;
   scene.add(lamp, lamp.target);
-  // light spilling up from the shade onto the wall and the lower board
-  const spill = new THREE.PointLight('#ffae62', 160, 110, 2); spill.position.copy(out.bulb).add(new THREE.Vector3(0, 6, -4)); scene.add(spill);
-  // warm bounce off the desk and the pages onto the board
-  const bounce = new THREE.PointLight('#ff9d55', 300, 120, 2); bounce.position.set(0, 12, -14); scene.add(bounce);
+  // warm bounce off the desk and the pages onto the board. A spot aimed up at the board, so nothing in front of it
+  // (the desk's front edge, the props' faces) catches a highlight from a light that isn't there.
+  const bounce = new THREE.SpotLight('#ff9d55', 300, 130, 1.2, 1, 2); bounce.position.set(0, 6, -14); bounce.target.position.set(0, 44, -46); scene.add(bounce, bounce.target);
   // the window: cool night light through venetian blinds with rain on the glass
   const win = new THREE.SpotLight('#8fa6d6', 56000, 460, 0.44, 0.45, 2);
   win.position.copy(WINDOW); win.target.position.set(6, 28, -30); win.castShadow = true; win.shadow.mapSize.set(1024, 1024); win.shadow.bias = -0.0003; win.shadow.normalBias = 0.06; win.shadow.radius = 2;
-  const rain = rainGobo(mobile); win.map = rain.texture; scene.add(win, win.target);
+  const rain = rainGobo(renderer, mobile, out); win.map = rain.texture; win.intensity /= rain.glass; scene.add(win, win.target); out.rain = rain;
   ticks.push((t, dt) => rain.update(t, dt));
   // lightning, now and then: the window flashes, the room shows for an instant
   const flash = new THREE.DirectionalLight('#c9d6ff', 0); flash.position.copy(WINDOW); scene.add(flash);
-  const baseWin = win.intensity; let next = 14 + Math.random() * 20, strike = null;
+  const baseWin = win.intensity; let next = 20 + Math.random() * 25, strike = null;
   out.lightningAt = (t) => { strike = { t0: t, k: 0.7 + Math.random() * 0.6 }; };
   ticks.push(t => {
-    if (!strike && t > next && !out.freeze) { strike = { t0: t, k: 0.6 + Math.random() * 0.7 }; next = t + 28 + Math.random() * 50; out.events.lightning?.(1 + Math.random() * 5); }
+    if (!strike && t > next && !out.freeze) { strike = { t0: t, k: 0.6 + Math.random() * 0.7 }; next = t + 50 + Math.random() * 70; out.events.lightning?.(1 + Math.random() * 5); }
     let f = 0; if (strike) { const u = t - strike.t0; f = (Math.exp(-((u - 0.05) ** 2) / 0.002) + 0.6 * Math.exp(-((u - 0.28) ** 2) / 0.004) + 0.35 * Math.exp(-((u - 0.5) ** 2) / 0.01)) * strike.k; if (u > 1.2) strike = null; }
     win.intensity = baseWin * (1 + f * 7); win.color.setRGB(0.56 + f * 0.3, 0.65 + f * 0.25, 0.84 + f * 0.1); flash.intensity = f * 0.9;
   });
-  // the lamp flickers a little on old wiring
-  const base = lamp.intensity;
-  ticks.push(t => { const flick = 1 + Math.sin(t * 13.1) * 0.006 + Math.sin(t * 7.7) * 0.008 + (Math.sin(t * 0.37) > 0.995 ? -0.1 : 0); lamp.intensity = base * flick; spill.intensity = 160 * flick; out.lampObj?.userData.setGlow?.(flick); out.lampK = flick; });
+  out.lampObj?.userData.setGlow?.(1);
   out.lamp = lamp; out.win = win;
 }
 
-// blinds and window frame, with raindrops on the glass, as a light cookie for the window spot
-function rainGobo(mobile) {
-  const S = mobile ? 256 : 512; const [c, g] = cv(S, S); const [bc, bg] = cv(S, S);
-  // blinds: slats with soft edges, a mullion and a transom
+// The window light's cookie: the blinds, and the rain on the pane in front of them. Each drop on the glass is a small
+// lens, so its shadow is a dark ring around a brighter core. Drops land and merge; once heavy enough they run down in
+// jerks, swallowing what they meet and leaving beads and a fading wet streak behind. Simulated in pixels of a 1024
+// square, drawn on the GPU into a render target that the spot projects.
+function rainGobo(renderer, mobile, out) {
+  const S = mobile ? 512 : 1024, GLASS = 0.62; // the clear pane passes GLASS; a drop's focused core passes up to 1
+  const [bc, bg] = cv(S, S);
   bg.fillStyle = '#000'; bg.fillRect(0, 0, S, S);
   const slat = S / 13;
   for (let y = 0; y < S; y += slat) { const gr = bg.createLinearGradient(0, y, 0, y + slat); gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.18, 'rgba(255,255,255,1)'); gr.addColorStop(0.62, 'rgba(255,255,255,1)'); gr.addColorStop(0.8, 'rgba(255,255,255,0)'); bg.fillStyle = gr; bg.fillRect(0, y, S, slat); }
   bg.fillStyle = '#000'; bg.fillRect(S * 0.49, 0, S * 0.025, S); bg.fillRect(0, S * 0.33, S, S * 0.02);
   const vg = bg.createRadialGradient(S / 2, S / 2, S * 0.2, S / 2, S / 2, S * 0.62); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,1)'); bg.fillStyle = vg; bg.fillRect(0, 0, S, S);
-  const r = rng(55); const drops = [];
-  const spawn = (y) => ({ x: r() * S, y: y ?? r() * S, rad: (0.6 + r() * 2.4) * S / 512, v: 0, run: r() < 0.08, trail: [] });
-  for (let i = 0; i < (mobile ? 110 : 220); i++) drops.push(spawn());
-  const texture = ctex(c); texture.colorSpace = THREE.SRGBColorSpace;
-  let acc = 0;
-  return {
-    texture,
-    update(t, dt) {
-      acc += dt; if (acc < 1 / 30) return; const step = acc; acc = 0;
-      g.drawImage(bc, 0, 0);
-      g.globalCompositeOperation = 'multiply';
-      for (const d of drops) {
-        if (d.run) { d.v = Math.min(60, d.v + step * 40 * (0.5 + r())); d.y += d.v * step * S / 512; d.x += (r() - 0.5) * 0.6; d.trail.push([d.x, d.y]); if (d.trail.length > 40) d.trail.shift(); }
-        else if (r() < step * 0.02) d.run = true;
-        if (d.y > S + 10) Object.assign(d, spawn(-5));
-        // a drop on the glass: dark rim, clearer centre
-        g.fillStyle = 'rgba(70,70,80,1)'; g.beginPath(); g.arc(d.x, d.y, d.rad * 1.25, 0, 7); g.fill();
-        g.fillStyle = 'rgba(205,205,215,1)'; g.beginPath(); g.arc(d.x - d.rad * 0.15, d.y - d.rad * 0.2, d.rad * 0.55, 0, 7); g.fill();
-        if (d.run && d.trail.length > 2) { g.strokeStyle = 'rgba(150,150,160,1)'; g.lineWidth = d.rad * 0.7; g.beginPath(); d.trail.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.stroke(); }
+  const blinds = ctex(bc);
+
+  const rt = new THREE.WebGLRenderTarget(S, S, { depthBuffer: false, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter });
+  const gs = new THREE.Scene(), gc = new THREE.OrthographicCamera(0, 1, 1, 0, -1, 1);
+  const bgQ = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).translate(0.5, 0.5, 0), new THREE.MeshBasicMaterial({ map: blinds, color: new THREE.Color(GLASS, GLASS, GLASS), toneMapped: false, depthTest: false, depthWrite: false }));
+  gs.add(bgQ);
+  const MAX = mobile ? 2000 : 4400, geo = new THREE.InstancedBufferGeometry(); geo.index = new THREE.BufferAttribute(new Uint16Array([0, 1, 2, 0, 2, 3]), 1);
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0]), 3));
+  const aD = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 4), 4), aK = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 4), 4);
+  aD.setUsage(THREE.DynamicDrawUsage); aK.setUsage(THREE.DynamicDrawUsage); geo.setAttribute('aD', aD); geo.setAttribute('aK', aK); geo.instanceCount = 0;
+  const mat = new THREE.ShaderMaterial({
+    depthTest: false, depthWrite: false, toneMapped: false,
+    // 2x multiply (dst * src + src * dst): the shader writes m / 2, so a drop can both darken (m < 1) and focus (m > 1)
+    blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.DstColorFactor, blendDst: THREE.SrcColorFactor,
+    vertexShader: `attribute vec4 aD, aK; varying vec2 vQ; varying vec4 vK;
+      void main(){ float k = aK.x > 0.5 ? 1.0 : 1.5; vQ = position.xy * k; vK = aK; gl_Position = projectionMatrix * vec4(aD.xy + position.xy * aD.zw * k, 0.0, 1.0); }`,
+    fragmentShader: `varying vec2 vQ; varying vec4 vK;
+      void main(){
+        float m;
+        if (vK.x > 0.5) { // wet streak: a faint soft line
+          m = 1.0 - 0.22 * vK.y * (1.0 - smoothstep(0.25, 1.0, abs(vQ.x))) * smoothstep(1.0, 0.6, abs(vQ.y));
+        } else {          // drop: lumpy outline, dark rim, bright core sitting low (drops on a pane are heavier at the bottom)
+          float a = atan(vQ.y, vQ.x), s = vK.z * 6.2832;
+          float r = length(vQ) * (1.0 + 0.07 * sin(3.0 * a + s) + 0.045 * sin(5.0 * a + 2.7 * s));
+          float inside = smoothstep(1.1, 0.84, r), rim = smoothstep(0.18, 0.9, r) * inside;
+          vec2 c = vQ - vec2(0.06, -0.22); float core = exp(-dot(c, c) * 4.0) * inside;
+          m = mix(1.0, 1.0 - 0.86 * rim + 0.8 * core, vK.y);
+        }
+        gl_FragColor = vec4(vec3(m * 0.5), 1.0);
+      }`,
+  });
+  const dm = new THREE.Mesh(geo, mat); dm.frustumCulled = false; dm.renderOrder = 1; gs.add(dm);
+
+  // ---- the simulation, in px of a 1024 square, y up; a coarse grid keeps the neighbour tests cheap ----
+  const r = rng(55), P = 1024, MAXD = MAX - 400; let drops = []; const runs = [], streaks = [];
+  const CELL = 24, GW = Math.ceil(P / CELL) + 4, grid = new Map();
+  const cell = (x, y) => (Math.floor(y / CELL) + 2) * GW + Math.floor(x / CELL) + 2;
+  const put = d => { const k = cell(d.x, d.y); let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(d); };
+  const near = (x, y, f) => { const cx = Math.floor(x / CELL) + 2, cy = Math.floor(y / CELL) + 2; for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) { const a = grid.get((cy + j) * GW + cx + i); if (a) for (const d of a) if (!d.dead && f(d)) return d; } return null; };
+  const land = (x, y, rad) => {
+    const d = near(x, y, d => (d.x - x) ** 2 + (d.y - y) ** 2 < (d.rad + rad) ** 2);
+    if (d) { const a = d.rad ** 3, b = rad ** 3, v = a + b; d.x = (d.x * a + x * b) / v; d.y = (d.y * a + y * b) / v; d.rad = Math.cbrt(v); return d; }
+    const n = { x, y, rad, ax: 0.9 + r() * 0.2, seed: r(), a: 0 }; drops.push(n); put(n); return n;
+  };
+  function startRun(d) { d.dead = true; runs.push({ x: d.x, y: d.y, rad: d.rad, seed: d.seed, moving: false, t: r() * 0.8, vx: 0, trav: 0, next: 6, sx: d.x, sy: d.y }); }
+  const step = dt => {
+    grid.clear(); for (const d of drops) put(d);
+    // rain landing on the pane: mostly fine droplets; drops that grow heavy, and now and then a fat one, start to run
+    for (let n = Math.floor(dt * 120 + r()); n > 0; n--) { const d = land(r() * P, r() * P, 1.7 + Math.pow(r(), 2.6) * 3.4); if (d.rad > 5.4 && runs.length < 12) startRun(d); }
+    if (r() < dt * 0.4 && runs.length < 12) startRun(land(r() * P, P * (0.3 + 0.75 * r()), 5.6 + r() * 1.8));
+    for (const d of drops) d.a = Math.min(1, d.a + dt * 3);
+    for (let i = runs.length - 1; i >= 0; i--) {
+      const q = runs[i];
+      // stick-slip: a burst of sliding, then a pause while the drop gathers itself
+      q.t -= dt; if (q.t < 0) { q.moving = !q.moving; q.t = q.moving ? 0.25 + r() * 0.9 : 0.15 + r() * (q.rad > 6.5 ? 0.6 : 1.8); q.vx = (r() - 0.5) * 10; }
+      if (q.moving) {
+        const v = (16 + (q.rad - 5) * 8) * (0.7 + r() * 0.6); q.y -= v * dt; q.x += q.vx * dt; q.trav += v * dt;
+        near(q.x, q.y, d => { if ((d.x - q.x) ** 2 + (d.y - q.y) ** 2 < (d.rad + q.rad * 0.9) ** 2) { q.rad = Math.cbrt(q.rad ** 3 + d.rad ** 3); d.dead = true; } return false; }); // swallow what it runs into
+        // leave a bead behind every so often, and a piece of wet streak
+        if (q.trav > q.next) { const b = 1.2 + r() * 1.2; if (q.rad ** 3 - b ** 3 > 4.6 ** 3) { q.rad = Math.cbrt(q.rad ** 3 - b ** 3); const n = { x: q.x + (r() - 0.5) * 1.5, y: q.y + q.rad * 1.1, rad: b, ax: 1, seed: r(), a: 1 }; drops.push(n); put(n); } q.trav = 0; q.next = 5 + r() * 9; }
+        if (Math.hypot(q.x - q.sx, q.y - q.sy) > 7) { streaks.push({ x0: q.sx, y0: q.sy, x1: q.x, y1: q.y + q.rad * 0.6, w: q.rad * 0.42, age: 0 }); q.sx = q.x; q.sy = q.y + q.rad * 0.6; }
       }
-      g.globalCompositeOperation = 'source-over';
-      texture.needsUpdate = true;
+      q.rad = Math.min(q.rad, 9);
+      if (q.y < -12) runs.splice(i, 1);
+    }
+    for (let i = streaks.length - 1; i >= 0; i--) { streaks[i].age += dt; if (streaks[i].age > 14) streaks.splice(i, 1); }
+    drops = drops.filter(d => !d.dead);
+    if (drops.length > MAXD) drops.splice(0, drops.length - MAXD); // the pane holds only so much: the oldest droplets dry off
+    while (streaks.length > MAX - MAXD - runs.length) streaks.shift();
+  };
+  // the rain has been falling for a while already
+  for (let i = 0; i < 900; i++) step(1 / 10);
+
+  const write = () => {
+    let n = 0; const D = aD.array, K = aK.array, u = 1 / P;
+    for (const s of streaks) { const k = Math.exp(-s.age / 5); if (k < 0.03) continue; D.set([(s.x0 + s.x1) / 2 * u, (s.y0 + s.y1) / 2 * u, s.w * u, Math.max(0.5, Math.abs(s.y0 - s.y1) / 2 + 1) * u], n * 4); K.set([1, k, 0, 0], n * 4); n++; }
+    for (const d of drops) { D.set([d.x * u, d.y * u, d.rad * d.ax * u, d.rad / d.ax * u], n * 4); K.set([0, d.a, d.seed, 0], n * 4); n++; }
+    for (const q of runs) { const st = q.moving ? 1.22 : 1.08; D.set([q.x * u, q.y * u, q.rad / Math.sqrt(st) * u, q.rad * st * u], n * 4); K.set([0, 1, q.seed, 0], n * 4); n++; }
+    geo.instanceCount = n; aD.needsUpdate = aK.needsUpdate = true;
+    const prev = renderer.getRenderTarget(), sm = renderer.shadowMap.needsUpdate;
+    renderer.setRenderTarget(rt); renderer.render(gs, gc); renderer.setRenderTarget(prev); renderer.shadowMap.needsUpdate = sm;
+  };
+  let acc = 1;
+  return {
+    texture: rt.texture, glass: GLASS, rt, stats: () => ({ drops: drops.length, runs: runs.length, streaks: streaks.length }),
+    update(t, dt) {
+      acc += dt; if (acc < 1 / 30) return;
+      if (!out.freeze) step(Math.min(0.1, acc)); acc = 0;
+      write();
     },
   };
-}
-
-// dust drifting through the lamp's cone only
-function dust(scene, mobile, out) {
-  const n = mobile ? 300 : 700; const pos = new Float32Array(n * 3), seed = new Float32Array(n); const r = rng(77);
-  for (let i = 0; i < n; i++) { pos[i * 3] = -42 + r() * 70; pos[i * 3 + 1] = r() * 34; pos[i * 3 + 2] = -34 + r() * 50; seed[i] = r() * 100; }
-  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('seed', new THREE.BufferAttribute(seed, 1));
-  const L = out.lamp, dir = new THREE.Vector3().subVectors(L.target.position, L.position).normalize();
-  const mat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-    uniforms: { uT: { value: 0 }, uCol: { value: new THREE.Color('#ffd7a0') }, uA: { value: 0.75 }, uPx: { value: Math.min(devicePixelRatio, 2) }, uL: { value: L.position.clone() }, uD: { value: dir }, uCos: { value: Math.cos(L.angle) } },
-    vertexShader: `attribute float seed; uniform float uT, uPx, uCos; uniform vec3 uL, uD; varying float vA;
-      void main(){ vec3 p = position; float s = seed; p.x += sin(uT*.07 + s)*3.0 + sin(uT*.13 + s*1.7)*1.5; p.y = mod(p.y + uT*(.2 + fract(s)*.3), 34.); p.z += cos(uT*.09 + s*2.3)*3.0;
-        vec3 v = p - uL; float d = length(v); float c = dot(v / d, uD); float cone = smoothstep(uCos, uCos + 0.12, c) / (1. + d*d*0.0009);
-        vec4 mv = modelViewMatrix * vec4(p, 1.); gl_Position = projectionMatrix * mv; gl_PointSize = uPx * (34. / -mv.z) * (0.5 + fract(s*3.1));
-        vA = cone * smoothstep(0., 3., p.y) * smoothstep(34., 26., p.y) * (.3 + .7*fract(s*7.3)) * (0.6 + 0.4*sin(uT*0.7 + s*5.)); }`,
-    fragmentShader: 'uniform vec3 uCol; uniform float uA; varying float vA; void main(){ float d = length(gl_PointCoord - .5); gl_FragColor = vec4(uCol, smoothstep(.5, 0., d) * vA * uA); }' });
-  const pts = new THREE.Points(geo, mat); pts.frustumCulled = false; scene.add(pts);
-  ticks.push(t => { mat.uniforms.uT.value = t; });
 }
 
 // a dim environment matching the room: the lamp's warm pool, the window's cool slats, black elsewhere (for reflections on brass, glass, varnish)

@@ -117,7 +117,6 @@ function coverArt(g, S, w, h, mask) {
     g.fillRect(cx - 2.2 * S, 14.0 * S, 4.4 * S, 0.03 * S);
     T1(SUB_TXT.toUpperCase(), 14.8, `400 ${0.3 * S}px ${DISPLAY}`, 0.06);
     T1(AUTHOR.toUpperCase(), 18.7, `400 ${0.3 * S}px ${DISPLAY}`, 0.14);
-    if (!mask) stamp(g, S, 'CONFIDENTIAL', 9.6, 16.6, { rot: -0.16, color: '#c8352a', size: 0.48, alpha: 0.8 });
   } else {
     g.fillStyle = F(T.accent); g.fillRect(0, 1.2 * S, 10.6 * S, 3.6 * S);
     g.fillStyle = mask ? '#000' : '#15171a'; g.textAlign = 'left';
@@ -301,12 +300,10 @@ export const FACES = {
       clothFill(g, w, h, T.cloth);
       const fg = NOIR ? '#e6d6b4' : '#f2f2f2';
       g.fillStyle = fg; g.textAlign = 'center';
-      g.font = `${NOIR ? 700 : 600} ${0.9 * S}px ${TITLE}`; g.letterSpacing = (NOIR ? 0.08 : 0) * S + 'px'; g.fillText(TITLE_TXT, 7.25 * S, 3.4 * S); g.letterSpacing = '0px';
-      const lines = ['Every intelligent machine is a detective.', 'It gathers evidence, follows leads, rules', 'out the impossible and acts on what remains.', 'Ten cases, from agents and search to', 'learning machines and language models.', 'Every exhibit stands up from its page.'];
-      g.font = `400 ${0.34 * S}px ${SERIF}`; lines.forEach((l, i) => g.fillText(l, 7.25 * S, (4.8 + i * 0.6) * S));
-      if (extra?.qr) { const q = 4.2; g.fillStyle = T.paper; g.fillRect((7.25 - q / 2 - 0.3) * S, (9.0 - 0.3) * S, (q + 0.6) * S, (q + 0.6) * S); g.drawImage(extra.qr, (7.25 - q / 2) * S, 9.0 * S, q * S, q * S); }
+      g.font = `${NOIR ? 700 : 600} ${0.9 * S}px ${TITLE}`; g.letterSpacing = (NOIR ? 0.08 : 0) * S + 'px'; g.fillText(TITLE_TXT, 7.25 * S + (NOIR ? 0.04 : 0) * S, 6.4 * S); g.letterSpacing = '0px';
+      if (extra?.qr) { const q = 4.2, y = 7.6; g.fillStyle = T.paper; g.fillRect((7.25 - q / 2 - 0.3) * S, (y - 0.3) * S, (q + 0.6) * S, (q + 0.6) * S); g.drawImage(extra.qr, (7.25 - q / 2) * S, y * S, q * S, q * S); }
       g.fillStyle = fg; g.font = `400 ${0.28 * S}px ${DISPLAY}`; g.letterSpacing = 0.1 * S + 'px';
-      g.fillText('SCAN TO OPEN THE BOOK', 7.25 * S + 0.05 * S, 14.6 * S); g.letterSpacing = '0px';
+      g.fillText('SCAN TO OPEN THE BOOK', 7.25 * S + 0.05 * S, 13.2 * S); g.letterSpacing = '0px';
       g.font = `400 ${0.28 * S}px ${SERIF}`; g.fillText('AI Fundamentals · QAIRU · 2026', 7.25 * S, 18.9 * S);
     },
   },

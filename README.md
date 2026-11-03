@@ -10,10 +10,10 @@ Endterm project for AI Fundamentals (AIF1303), QAIRU, Fall 2026, by Akhmetzhan T
 - **Look around:** drag (one finger on a phone).
 - **Come closer:** scroll, or pinch. It zooms toward whatever is under the pointer.
 - **Move sideways:** right-drag, shift-drag, or drag with two fingers.
-- **Turn a page:** click or tap the page, or press ← →. You can also use the buttons and dots at the bottom.
-- **Views:** the Desk / Read / Board buttons at the bottom right, or H (also Escape), R and B. Read leans over the open spread; on a phone it frames the text page.
+- **Turn a page:** click or tap the page, or press ← → (Home and End jump to the covers).
+- **Views:** the Desk / Read / Room buttons at the bottom right, or H (also Escape), R and O. Read leans over the open spread (on a phone it frames the text page); Room steps back to show the whole board and desk.
 - **Keyboard camera:** ↑ ↓ tilt, A D orbit, + − zoom.
-- **Sound:** M, or the button at the top right. Sound starts after your first click.
+- **Sound:** M, or the button at the bottom left. Sound starts after your first click: light rain at the window, distant thunder after the lightning, the desk clock, and the pages.
 - **Screen readers:** the text of the open spread is mirrored into the page as plain HTML and announced when the spread changes.
 
 ## How it is built

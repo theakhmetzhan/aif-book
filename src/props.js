@@ -498,7 +498,7 @@ function indexCards() {
   const topMesh = mesh(top, new THREE.MeshStandardMaterial({ map: cardMap, roughness: 0.9, metalness: 0, normalMap: tiledNormal(1), normalScale: new THREE.Vector2(0.25, 0.25) }), { name: 'topCard' });
   // tile the fibre normal in cm across the top card
   topMesh.material.normalMap.repeat.set(W / 6, D / 6);
-  topMesh.position.set(0.12, n * T + 0.0015, -0.05); topMesh.rotation.y = 0.035;
+  topMesh.position.set(0.12, n * T + 0.02, -0.05); topMesh.rotation.y = 0.035; // clear of the card below, or the two depth-fight
   const content = new THREE.Group(); content.add(mesh(stackGeo, stackMat, { name: 'stack' }), topMesh);
   return finalize(new THREE.Group(), content);
 }
@@ -530,7 +530,7 @@ function legalPad() {
     }
     return ctex(c);
   };
-  const sheetMat = new THREE.MeshStandardMaterial({ map: ruled(true), roughness: 0.88, metalness: 0, normalMap: tiledNormal(1), normalScale: new THREE.Vector2(0.3, 0.3) });
+  const sheetMat = new THREE.MeshStandardMaterial({ map: ruled(true), roughness: 0.88, metalness: 0, normalMap: tiledNormal(1), normalScale: new THREE.Vector2(0.3, 0.3), polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
   sheetMat.normalMap.repeat.set(W / 6, D / 6);
   const sheetBack = new THREE.MeshStandardMaterial({ color: '#efdc7a', roughness: 0.9, metalness: 0, side: THREE.BackSide });
   const underMat = new THREE.MeshStandardMaterial({ map: ruled(false), roughness: 0.9, metalness: 0 });
@@ -557,7 +557,7 @@ function legalPad() {
     const s = x * nrm.x + z * nrm.z - lineD; if (s <= 0) { sp.setY(i, 0); continue; }
     const a = s / R; sp.setXYZ(i, x - nrm.x * (s - R * Math.sin(a)), R * (1 - Math.cos(a)), z - nrm.z * (s - R * Math.sin(a)));
   }
-  sh.computeVertexNormals(); const topY = back + block + 0.004;
+  sh.computeVertexNormals(); const topY = back + block + 0.03; // a hair over the sheets below; any closer and the two depth-fight at desk distance
   const sheet = mesh(sh, sheetMat, { name: 'topSheet' }), sheetB = mesh(sh, sheetBack, { name: 'topSheetBack' }); sheet.position.y = sheetB.position.y = topY;
   const content = new THREE.Group(); content.add(chip, blockMesh, bind, sheet, sheetB);
   return finalize(new THREE.Group(), content);
