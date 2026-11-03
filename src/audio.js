@@ -103,11 +103,11 @@ export class Ambience {
    *  while it is in the air; a board sweeps lower and heavier, and thumps as it lands. */
   sheet({ type, sheet, board } = {}) {
     this._sheets ??= {}; // the rustle playing for each sheet in the air
+    this._early = null; // a rustle still waiting on its recording is stale once anything else happens, heard or not
     this._safe(() => {
       if (!this._live()) return;
       const now = this._ctx.currentTime, g = this._sheets[sheet];
       if (g) { g.gain.setTargetAtTime(0, now, type === 'land' ? 0.05 : 0.02); delete this._sheets[sheet]; }
-      this._early = null;
       if (type === 'lift') { this._sheets[sheet] = this._turn(board); if (!this._sheets[sheet]) this._early = { sheet, board }; } // recordings still decoding: start once they arrive
       else if (type === 'land' && board) this._one(this._bank.thump[Math.floor(this._r() * this._bank.thump.length)], now, 0.9 + this._r() * 0.1, this._grp('page', this._spots.book), LEVEL.thump);
     });
