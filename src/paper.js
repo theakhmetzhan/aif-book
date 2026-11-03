@@ -1,6 +1,7 @@
+import { T } from './theme.js';
 // Procedural paper, cloth and ornament. Abstract geometry only.
 const cache = {};
-function rng(seed) { return () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+export function rng(seed) { return () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
 // tileable grain: mottling + fibres + fine noise; returned as a canvas (neutral grey around 128 for overlay use)
 export function grainTile(size = 512, seed = 1) {
@@ -45,10 +46,10 @@ export function paperFill(g, w, h, base = '#f1e8d6', strength = 0.55, seed = 1) 
 // soft page shading: gutter darkening + edge falloff (side: 'left'|'right' = which side the spine is on)
 export function pageShade(g, w, h, spine) {
   const grd = spine === 'left' ? g.createLinearGradient(0, 0, w * 0.12, 0) : g.createLinearGradient(w, 0, w * 0.88, 0);
-  grd.addColorStop(0, 'rgba(70,45,15,.30)'); grd.addColorStop(0.35, 'rgba(70,45,15,.08)'); grd.addColorStop(1, 'rgba(70,45,15,0)');
+  const tint = T.name === 'noir' ? '70,45,15' : '30,32,36'; grd.addColorStop(0, `rgba(${tint},.26)`); grd.addColorStop(0.35, `rgba(${tint},.07)`); grd.addColorStop(1, `rgba(${tint},0)`);
   g.fillStyle = grd; g.fillRect(0, 0, w, h);
   const e = g.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.45, w / 2, h / 2, Math.max(w, h) * 0.75);
-  e.addColorStop(0, 'rgba(90,60,20,0)'); e.addColorStop(1, 'rgba(90,60,20,.10)');
+  e.addColorStop(0, `rgba(${tint},0)`); e.addColorStop(1, `rgba(${tint},${T.name === 'noir' ? .14 : .05})`);
   g.fillStyle = e; g.fillRect(0, 0, w, h);
 }
 
@@ -64,16 +65,23 @@ export function star8Points(R, innerRatio = 0.765) {
   const pts = []; for (let k = 0; k < 16; k++) { const a = -Math.PI / 2 + k * Math.PI / 8; const r = k % 2 ? R * innerRatio : R; pts.push([Math.cos(a) * r, Math.sin(a) * r]); } return pts;
 }
 
-// endpaper: lattice of eight-pointed stars and crosses
-export function endpaper(g, w, h, S) {
-  paperFill(g, w, h, '#2f3c63', 0.5, 9);
-  const step = 1.6 * S; g.save();
-  for (let y = -step; y < h + step; y += step) for (let x = -step; x < w + step; x += step) {
-    const ox = ((Math.round(y / step) % 2) ? step / 2 : 0);
-    g.beginPath(); star8(g, x + ox, y, step * 0.36); g.strokeStyle = 'rgba(214,180,110,.55)'; g.lineWidth = S * 0.03; g.stroke();
-    g.beginPath(); star8(g, x + ox, y, step * 0.16); g.fillStyle = 'rgba(214,180,110,.22)'; g.fill();
-    g.beginPath(); g.arc(x + ox + step / 2, y, S * 0.05, 0, 7); g.fillStyle = 'rgba(214,180,110,.4)'; g.fill();
-  }
+// endpaper: a street map of an imaginary city (the detective's patch), drawn procedurally
+export function endpaper(g, w, h, S, [base, line, hi] = ['#6f5233', 'rgba(239,227,200,.22)', 'rgba(239,227,200,.38)']) {
+  paperFill(g, w, h, base, 0.5, 9);
+  const r = rng(42); g.save(); g.lineCap = 'round';
+  // blocks: jittered grid of streets, plus two diagonal avenues and a river
+  const step = 1.15 * S;
+  g.strokeStyle = line; g.lineWidth = 0.05 * S;
+  for (let x = -step; x < w + step; x += step * (0.7 + r() * 0.6)) { g.beginPath(); g.moveTo(x, 0); let y = 0, xx = x; while (y < h) { y += step; xx += (r() - 0.5) * 0.25 * S; g.lineTo(xx, y); } g.stroke(); }
+  for (let y = -step; y < h + step; y += step * (0.7 + r() * 0.6)) { g.beginPath(); g.moveTo(0, y); let x = 0, yy = y; while (x < w) { x += step; yy += (r() - 0.5) * 0.25 * S; g.lineTo(x, yy); } g.stroke(); }
+  g.lineWidth = 0.14 * S; g.strokeStyle = hi;
+  g.beginPath(); g.moveTo(-1 * S, h * 0.85); g.lineTo(w + S, h * 0.2); g.stroke();
+  g.beginPath(); g.moveTo(w * 0.15, -S); g.lineTo(w * 0.7, h + S); g.stroke();
+  g.lineWidth = 0.5 * S; g.strokeStyle = line; g.beginPath(); g.moveTo(-S, h * 0.42);
+  for (let k = 0; k <= 10; k++) g.quadraticCurveTo(w * (k + 0.5) / 10, h * 0.42 + Math.sin(k * 1.3) * 1.4 * S, w * (k + 1) / 10, h * 0.42 + Math.sin(k * 1.3 + 0.7) * 0.9 * S);
+  g.stroke();
+  // a few marked locations
+  for (let k = 0; k < 7; k++) { const x = (0.1 + r() * 0.8) * w, y = (0.1 + r() * 0.8) * h; g.strokeStyle = hi; g.lineWidth = 0.04 * S; g.beginPath(); g.arc(x, y, 0.32 * S, 0, 7); g.stroke(); g.beginPath(); g.arc(x, y, 0.08 * S, 0, 7); g.fillStyle = hi; g.fill(); }
   g.restore();
 }
 
@@ -96,7 +104,7 @@ export function goldGradient(g, x0, y0, x1, y1) {
 // page-edge stripes for the page block sides
 export function edgeTexture() {
   const c = document.createElement('canvas'); c.width = 64; c.height = 256; const g = c.getContext('2d');
-  g.fillStyle = '#e9dfca'; g.fillRect(0, 0, 64, 256); const r = rng(11);
+  g.fillStyle = T.paper; g.fillRect(0, 0, 64, 256); const r = rng(11);
   for (let y = 0; y < 256; y += 2) { g.fillStyle = `rgba(110,85,50,${0.06 + r() * 0.12})`; g.fillRect(0, y, 64, 1); }
   return c;
 }

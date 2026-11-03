@@ -1,193 +1,133 @@
 import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import QRCode from 'qrcode';
-import { Book, BW, BH, PW, BT } from './book.js';
-import { FACES, SHEETS, SPREADS, BOOK_URL } from './pages.js';
-import { grainTile } from './paper.js';
+import { T, MOODS } from './theme.js';
+import { Book } from './book.js';
+import { SHEETS, SPREADS, BOOK_URL, TITLE_TXT } from './pages.js';
+import { buildScene } from './scene.js';
 import './style.css';
 
 const qs = new URLSearchParams(location.search);
 const mobile = matchMedia('(pointer: coarse)').matches || Math.min(innerWidth, innerHeight) < 600;
 const N = SHEETS.length;
+document.documentElement.dataset.mood = T.name;
 
 async function fonts() {
-  const want = ['400 40px "EB Garamond"', 'italic 400 40px "EB Garamond"', '500 40px "EB Garamond"', '600 40px "EB Garamond"', 'italic 500 40px "EB Garamond"', '500 40px "Cormorant Garamond"', '600 40px "Cormorant Garamond"', '500 40px "JetBrains Mono"'];
-  await Promise.all(want.map(f => document.fonts.load(f, 'AaҰшқын→∗′≤'))); await document.fonts.ready;
+  const want = ['400 40px "Courier Prime"', '700 40px "Courier Prime"', 'italic 400 40px "Courier Prime"', '400 40px "Special Elite"', '700 40px "Playfair Display"', '400 40px "Playfair Display"', '400 40px "Caveat"',
+    '400 40px "Inter"', '600 40px "Inter"', 'italic 400 40px "Inter"', '500 40px "Space Grotesk"', '600 40px "Space Grotesk"', '500 40px "JetBrains Mono"'];
+  await Promise.all(want.map(f => document.fonts.load(f, 'AaBb→∗′≤✓'))); await document.fonts.ready;
 }
 
 async function start() {
   await fonts();
   const qr = document.createElement('canvas');
-  await QRCode.toCanvas(qr, BOOK_URL, { margin: 0, width: 640, errorCorrectionLevel: 'M', color: { dark: '#232b45', light: '#efe4cc' } });
+  await QRCode.toCanvas(qr, BOOK_URL, { margin: 0, width: 640, errorCorrectionLevel: 'M', color: { dark: T.ink, light: T.paper } });
 
   const canvas = document.querySelector('#gl');
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: !!qs.get('shot') });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, mobile ? 2 : 2));
-  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
-  const scene = new THREE.Scene(); scene.background = new THREE.Color('#101116'); scene.fog = new THREE.Fog('#101116', 120, 330);
-  const pm = new THREE.PMREMGenerator(renderer); scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture; scene.environmentIntensity = 0.35;
-
-  // desk
-  const dc = document.createElement('canvas'); dc.width = dc.height = 1024; const dg = dc.getContext('2d');
-  const rg = dg.createRadialGradient(512, 512, 60, 512, 512, 560); rg.addColorStop(0, '#34333a'); rg.addColorStop(0.05, '#2a2a31'); rg.addColorStop(0.16, '#17181e'); rg.addColorStop(1, '#101116');
-  dg.fillStyle = rg; dg.fillRect(0, 0, 1024, 1024); dg.globalCompositeOperation = 'overlay'; dg.globalAlpha = 0.35; dg.fillStyle = dg.createPattern(grainTile(512, 77), 'repeat'); dg.fillRect(0, 0, 1024, 1024);
-  const deskTex = new THREE.CanvasTexture(dc); deskTex.colorSpace = THREE.SRGBColorSpace;
-  const desk = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), new THREE.MeshStandardMaterial({ map: deskTex, roughness: 0.96 }));
-  desk.rotation.x = -Math.PI / 2; desk.position.y = -BT - 0.002; desk.receiveShadow = true; scene.add(desk);
-
-  // light
-  scene.add(new THREE.HemisphereLight('#fff4e0', '#2a2c36', 0.55));
-  const key = new THREE.DirectionalLight('#fff1dc', 2.3); key.castShadow = true;
-  key.shadow.mapSize.set(mobile ? 2048 : 4096, mobile ? 2048 : 4096); key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02; key.shadow.radius = 4;
-  Object.assign(key.shadow.camera, { left: -22, right: 22, top: 18, bottom: -18, near: 1, far: 90 });
-  scene.add(key, key.target);
-  const fill = new THREE.DirectionalLight('#c9d4ff', 0.35); fill.position.set(18, 12, -10); scene.add(fill);
-
-  // the spark
-  const sc = document.createElement('canvas'); sc.width = sc.height = 256; const sg = sc.getContext('2d');
-  const gr = sg.createRadialGradient(128, 128, 0, 128, 128, 128); gr.addColorStop(0, 'rgba(255,255,245,1)'); gr.addColorStop(0.08, 'rgba(255,236,190,1)'); gr.addColorStop(0.25, 'rgba(255,190,110,.45)'); gr.addColorStop(0.6, 'rgba(255,160,80,.08)'); gr.addColorStop(1, 'rgba(255,150,70,0)');
-  sg.fillStyle = gr; sg.fillRect(0, 0, 256, 256);
-  const spark = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(sc), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
-  spark.scale.set(2.2, 2.2, 1); scene.add(spark);
-  const sparkLight = new THREE.PointLight('#ffcf8a', 6, 9, 1.6); scene.add(sparkLight);
-
+  renderer.setPixelRatio(Math.min(devicePixelRatio, mobile ? 1.6 : 2));
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  const scene = new THREE.Scene();
+  const pm = new THREE.PMREMGenerator(renderer); scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture; scene.environmentIntensity = T.name === 'noir' ? 0.18 : 0.45;
+  const room = buildScene(scene, renderer, { mobile });
   const book = new Book(scene, renderer, { qr, mobile });
-  const resize = () => renderer.setSize(innerWidth, innerHeight, false); resize(); addEventListener('resize', resize);
 
-  // cameras
-  const persp = new THREE.PerspectiveCamera(30, 1, 0.1, 400);
-  const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 400);
-  const view = { yaw: 0.0, pitch: 0.92, dist: 46, read: 0, readTarget: 0, zoom: 0, zoomTarget: 0, zoomSide: 0 };
+  // ---------- one free camera ----------
+  const cam = new THREE.PerspectiveCamera(40, 1, 0.5, 900);
+  const controls = new OrbitControls(cam, canvas);
+  Object.assign(controls, { enableDamping: true, dampingFactor: 0.08, rotateSpeed: 0.55, panSpeed: 0.8, zoomSpeed: 0.9, zoomToCursor: true, screenSpacePanning: true, minDistance: 6, maxDistance: 260, maxPolarAngle: Math.PI * 0.53 });
+  controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+  const home = () => {
+    const aspect = innerWidth / innerHeight, halfW = aspect < 1 ? 16.5 : 25;
+    const dist = Math.max(42, halfW / (Math.tan(THREE.MathUtils.degToRad(20)) * aspect));
+    const tgt = new THREE.Vector3(0, aspect < 1 ? 9 : 9.5, -6);
+    return { pos: new THREE.Vector3(0, aspect < 1 ? 16 : 7.2, tgt.z + dist), tgt };
+  };
+  const setView = ({ pos, tgt }) => { cam.position.copy(pos); controls.target.copy(tgt); controls.update(); };
+  const resize = () => { renderer.setSize(innerWidth, innerHeight, false); cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); };
+  resize(); addEventListener('resize', resize);
+  setView(home());
+  if (qs.get('cam')) { const v = qs.get('cam').split(',').map(Number); setView({ pos: new THREE.Vector3(v[0], v[1], v[2]), tgt: new THREE.Vector3(v[3], v[4], v[5]) }); }
+  // fly smoothly back home
+  let fly = null;
+  const goHome = () => { fly = { from: { pos: cam.position.clone(), tgt: controls.target.clone() }, to: home(), t: 0 }; };
+
+  // ---------- pages ----------
   let p = +(qs.get('p') ?? 0), target = p;
-  if (qs.get('read')) view.read = view.readTarget = 1;
-  if (qs.get('yaw')) view.yaw = +qs.get('yaw'); if (qs.get('pitch')) view.pitch = +qs.get('pitch');
+  const go = d => { target = Math.min(N, Math.max(0, Math.round(target) + d)); hideHint(); };
 
   // ---------- HUD ----------
   const hud = document.querySelector('#hud');
+  const other = T.name === 'noir' ? 'modern' : 'noir';
   hud.innerHTML = `
-    <div class="brand"><span class="kz">Ұшқын</span><span class="lat">Ushqyn</span></div>
+    <div class="brand"><span class="t">${TITLE_TXT}</span><span class="s">A Casebook of AI</span></div>
+    <div class="mood">${Object.values(MOODS).map(m => `<button data-m="${m.name}" class="${m.name === T.name ? 'on' : ''}">${m.label}</button>`).join('')}</div>
     <div class="where"><button class="nav prev" aria-label="Previous page">‹</button><span class="label"></span><button class="nav next" aria-label="Next page">›</button></div>
     <div class="dots">${Array.from({ length: N + 1 }, (_, i) => `<i data-p="${i}"></i>`).join('')}</div>
-    <div class="mode"><button data-m="0" class="on">Explore</button><button data-m="1">Read</button></div>
-    <div class="hint">${mobile ? 'Swipe up to turn the page · drag sideways to walk around' : 'Scroll to turn the page · drag to walk around the book'}</div>`;
-  const label = hud.querySelector('.label'), dots = [...hud.querySelectorAll('.dots i')], modeBtns = [...hud.querySelectorAll('.mode button')], hint = hud.querySelector('.hint');
-  const portrait = () => innerWidth / innerHeight < 0.85;
-  // page-by-page order for narrow screens: [spread, side]
-  const STOPS = [[0, 0], [1, 1]]; for (let i = 2; i < N - 1; i++) STOPS.push([i, -1], [i, 1]); STOPS.push([N - 1, -1], [N, 0]);
-  view.side = 1;
-  const go = d => {
-    hideHint();
-    if (!portrait()) { target = Math.min(N, Math.max(0, Math.round(target) + d)); return; }
-    const ri = Math.round(target); let k = STOPS.findIndex(([a, b]) => a === ri && (b === view.side || b === 0));
-    if (k < 0) k = STOPS.findIndex(([a]) => a === ri);
-    const [a, b] = STOPS[Math.min(STOPS.length - 1, Math.max(0, k + d))]; target = a; if (b) view.side = b;
-  };
+    <button class="home" aria-label="Back to the desk view" title="Back to the desk view">⌂</button>
+    <div class="hint">${mobile ? 'Drag to look around · pinch to come closer · tap a page to turn it' : 'Scroll to turn pages · drag to look around · right-drag to move · pinch or ⌃-scroll to come closer'}</div>`;
+  const label = hud.querySelector('.label'), dots = [...hud.querySelectorAll('.dots i')], hint = hud.querySelector('.hint');
   hud.querySelector('.prev').onclick = () => go(-1); hud.querySelector('.next').onclick = () => go(1);
-  dots.forEach(d => d.onclick = () => { target = +d.dataset.p; view.side = target === N - 1 ? -1 : 1; hideHint(); });
-  modeBtns.forEach(b => b.onclick = () => setRead(+b.dataset.m));
-  function setRead(on) { view.readTarget = on; if (!on) view.zoomTarget = 0; modeBtns.forEach(b => b.classList.toggle('on', +b.dataset.m === on)); }
-  setRead(view.readTarget);
+  hud.querySelector('.home').onclick = goHome;
+  dots.forEach(d => d.onclick = () => { target = +d.dataset.p; hideHint(); });
+  hud.querySelectorAll('.mood button').forEach(b => b.onclick = () => { if (b.dataset.m === T.name) return; const u = new URLSearchParams(location.search); u.set('mood', b.dataset.m); u.set('p', String(Math.round(target)));
+    const c = cam.position, t = controls.target; u.set('cam', [c.x, c.y, c.z, t.x, t.y, t.z].map(v => v.toFixed(2)).join(',')); document.body.classList.remove('ready'); setTimeout(() => location.search = u.toString(), 450); });
   let hinted = false; function hideHint() { if (!hinted) { hinted = true; hint.classList.add('off'); } }
 
-  // ---------- input ----------
+  // ---------- input: wheel turns pages, ⌃/pinch zooms (handled by the controls) ----------
   let idle = 0;
-  addEventListener('wheel', e => { e.preventDefault(); const d = (Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX) * (e.deltaMode === 1 ? 16 : 1); target = Math.min(N, Math.max(0, target + d * 0.0022)); idle = 0; hideHint(); }, { passive: false });
-  let drag = null;
-  canvas.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, axis: null, moved: 0, type: e.pointerType }; canvas.setPointerCapture(e.pointerId); });
-  canvas.addEventListener('pointermove', e => {
-    if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY; drag.moved += Math.abs(dx) + Math.abs(dy);
-    if (drag.moved < 4) return; hideHint();
-    if (drag.type === 'touch') {
-      if (!drag.axis) drag.axis = Math.abs(e.clientX - drag.x0) > Math.abs(e.clientY - drag.y0) ? 'x' : 'y';
-      if (drag.axis === 'y') { if (!portrait()) { target = Math.min(N, Math.max(0, target - dy * 0.006)); idle = 0; } return; }
-    }
-    if (view.readTarget === 1) { if (dy > 6 || Math.abs(dx) > 6) { setRead(0); view.pitch = 1.3; } return; }
-    view.yaw -= dx * 0.0055; view.pitch = Math.min(1.5, Math.max(0.18, view.pitch + dy * 0.0045));
-  });
+  addEventListener('wheel', e => {
+    if (e.ctrlKey || e.metaKey) return; // pinch / ⌃-scroll → controls zoom
+    e.preventDefault(); e.stopImmediatePropagation();
+    const d = (Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX) * (e.deltaMode === 1 ? 16 : 1);
+    target = Math.min(N, Math.max(0, target + d * 0.0022)); idle = 0; hideHint();
+  }, { passive: false, capture: true });
+  // a click (not a drag) on the book turns the page toward the side clicked
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(); let down = null;
+  canvas.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; fly = null; });
   canvas.addEventListener('pointerup', e => {
-    if (drag && drag.type === 'touch' && drag.axis === 'y' && portrait()) { const t = e.clientY - drag.y0; if (Math.abs(t) > 40) go(t < 0 ? 1 : -1); }
-    else if (drag && drag.moved < 5 && view.readTarget === 1) {
-      if (portrait()) go(e.clientX < innerWidth / 2 ? -1 : 1); // tap a side to turn
-      else if (view.zoomTarget) view.zoomTarget = 0; else { view.zoomTarget = 1; view.zoomSide = e.clientX < innerWidth / 2 ? -1 : 1; } // click to zoom one page
-    }
-    if (drag?.type === 'touch' && drag.axis === 'y') idle = 0;
-    drag = null;
+    if (!down) return; const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y), dt = performance.now() - down.t; down = null;
+    if (moved > 6 || dt > 500) { hideHint(); return; }
+    ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); ray.setFromCamera(ndc, cam);
+    const hit = ray.intersectObject(book.group, true)[0]; if (!hit) return;
+    const local = book.group.worldToLocal(hit.point.clone());
+    const ri = Math.round(target); go(ri === 0 ? 1 : ri === N ? -1 : local.x >= 0 ? 1 : -1);
   });
+  controls.addEventListener('start', hideHint);
   addEventListener('keydown', e => {
     if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); go(1); }
     if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(-1); }
-    if (e.key === 'r' || e.key === 'R') setRead(view.readTarget ? 0 : 1);
     if (e.key === 'Home') target = 0; if (e.key === 'End') target = N;
+    if (e.key === 'h' || e.key === 'H' || e.key === 'Escape') goHome();
+    if (e.key === '+' || e.key === '=') { cam.position.lerp(controls.target, 0.18); }
+    if (e.key === '-' || e.key === '_') { cam.position.sub(controls.target).multiplyScalar(1.22).add(controls.target); }
   });
 
   // ---------- loop ----------
-  const clock = new THREE.Clock(); const sparkPos = new THREE.Vector3(7, 3, 0); let first = true;
-  const tgt = new THREE.Vector3();
-  function sparkFor(pi) {
-    const right = pi < N ? SHEETS[pi][0] : null, left = pi > 0 ? SHEETS[pi - 1][1] : null;
-    const pick = (pi === 0) ? 'cover' : pi === N ? 'back' : (FACES[right]?.popup ? right : FACES[left]?.popup ? left : right);
-    const s = FACES[pick].spark || [7, 1.5, 4];
-    if (pi === 0) return new THREE.Vector3(s[0] - 0.25, BH * 0 + 1.2 + s[1], s[2] - BH / 2);
-    if (pi === N) return new THREE.Vector3(-7.25, 1.2 + 2.2, -3);
-    const w = book.faceToWorld(pick, s[0], s[1], s[2], pi); return w;
-  }
+  const clock = new THREE.Timer(); let first = true;
+  const freeze = qs.get('freeze'), tFix = qs.get('t') ? +qs.get('t') : null;
+  const ease = x => x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2;
   function frame() {
-    const dt = Math.min(0.05, clock.getDelta()), el = clock.elapsedTime;
+    clock.update(); const dt = Math.min(0.05, clock.getDelta()), el = tFix ?? clock.getElapsed();
     idle += dt;
-    if (idle > 0.16 && !drag && !qs.get('freeze')) target += (Math.round(target) - target) * (1 - Math.exp(-dt * 7));
-    p += (target - p) * (1 - Math.exp(-dt * (first ? 100 : 5.2)));
-    if (Math.abs(target - p) < 1e-4) p = target;
-    book.set(+p.toFixed(5));
-    view.read += (view.readTarget - view.read) * (1 - Math.exp(-dt * 4.2)); if (Math.abs(view.read - view.readTarget) < 1e-3) view.read = view.readTarget;
-    view.zoom += (view.zoomTarget - view.zoom) * (1 - Math.exp(-dt * 5)); if (Math.abs(view.zoom - view.zoomTarget) < 1e-3) view.zoom = view.zoomTarget;
-    const e = view.read < 0.5 ? 4 * view.read ** 3 : 1 - (-2 * view.read + 2) ** 3 / 2;
-    const aspect = innerWidth / innerHeight;
-    // framing
-    const cx = book.centerX(p); const closedness = p < 1 ? 1 - p : p > N - 1 ? p - (N - 1) : 0;
-    const spreadW = (2 * BW + 1.6) * (1 - closedness) + (BW + 1.6) * closedness;
-    const mTop = mobile ? 54 : 58, mBot = mobile ? 150 : 96; const hudK = innerHeight / Math.max(200, innerHeight - mTop - mBot);
-    let vhRead = Math.max((BH + 0.8) * hudK, spreadW / aspect);
-    const pageVh = Math.max((BH + 0.6) * hudK, (PW + 0.5) / aspect);
-    const port = aspect < 0.85, zoom = port ? 1 : view.zoom, side = port ? view.side : view.zoomSide;
-    vhRead = vhRead + (pageVh - vhRead) * zoom;
-    const zx = zoom * side * (PW / 2) * (1 - closedness);
-    tgt.set(cx + zx * (port ? 1 : e), 0.6 * (1 - e), e * vhRead * ((mBot - mTop) / 2) / innerHeight);
-    // explore camera distance: fit the spread (or, on narrow screens, the page) with some air
-    const fovE = 30, vhE = port ? Math.max(BH * 0.9, (PW + 1.0) / aspect * 0.92) : Math.max(BH * 1.12, spreadW * 1.02 / Math.min(aspect, 1.9));
-    const fov = fovE * Math.pow(1.2 / fovE, e);
-    const vh = vhE + (vhRead - vhE) * e;
-    const dist = vh / (2 * Math.tan(THREE.MathUtils.degToRad(fov) / 2));
-    // shortest yaw back to 0 as we enter read mode
-    if (view.readTarget === 1) view.yaw += (Math.round(view.yaw / (Math.PI * 2)) * Math.PI * 2 - view.yaw) * (1 - Math.exp(-dt * 6));
-    const pitch = view.pitch + (Math.PI / 2 - 0.0005 - view.pitch) * e;
-    let cam;
-    if (view.read > 0.999) {
-      cam = ortho; const vw = vh * aspect;
-      ortho.left = -vw / 2; ortho.right = vw / 2; ortho.top = vh / 2; ortho.bottom = -vh / 2; ortho.near = 0.1; ortho.far = 200;
-      ortho.position.set(tgt.x, 100, tgt.z); ortho.up.set(0, 0, -1); ortho.lookAt(tgt); ortho.updateProjectionMatrix();
-    } else {
-      cam = persp; persp.fov = fov; persp.aspect = aspect; persp.near = Math.max(0.1, dist * 0.2); persp.far = dist * 3 + 60;
-      persp.position.set(tgt.x + Math.sin(view.yaw) * Math.cos(pitch) * dist, tgt.y + Math.sin(pitch) * dist, tgt.z + Math.cos(view.yaw) * Math.cos(pitch) * dist);
-      persp.up.set(0, 1, 0); persp.lookAt(tgt); persp.updateProjectionMatrix();
-    }
-    // light: from the upper left; drifts overhead in Read mode so shadows tuck under the paper
-    const lp = new THREE.Vector3(-13, 26, 12).lerp(new THREE.Vector3(-1.5, 30, 1.2), e);
-    key.position.copy(lp).add(new THREE.Vector3(cx, 0, 0)); key.target.position.set(cx, 0, 0);
-    // spark
-    const pi = Math.round(p); const sp = sparkFor(pi);
-    sparkPos.lerp(sp, first ? 1 : 1 - Math.exp(-dt * 2.2));
-    spark.position.copy(sparkPos).add(new THREE.Vector3(Math.sin(el * 0.9) * 0.08, Math.sin(el * 1.7) * 0.12, Math.cos(el * 0.7) * 0.08));
-    const flick = 1 + Math.sin(el * 7.3) * 0.04 + Math.sin(el * 3.1) * 0.05;
-    spark.scale.setScalar((1.7 - 0.6 * e) * flick); sparkLight.position.copy(spark.position); sparkLight.intensity = (4.2 - 2.2 * e) * flick; spark.material.opacity = 1 - 0.35 * e;
-    // HUD
+    if (idle > 0.16 && !freeze) target += (Math.round(target) - target) * (1 - Math.exp(-dt * 7));
+    p += (target - p) * (1 - Math.exp(-dt * (first ? 100 : 5.2))); if (Math.abs(target - p) < 1e-4) p = target;
+    book.set(+p.toFixed(5)); book.group.position.x = -book.centerX(p); book.animate(el);
+    if (fly) { fly.t = Math.min(1, fly.t + dt / 1.4); const k = ease(fly.t); cam.position.lerpVectors(fly.from.pos, fly.to.pos, k); controls.target.lerpVectors(fly.from.tgt, fly.to.tgt, k); if (fly.t >= 1) fly = null; }
+    controls.update();
+    // stay in the room: above the desk, in front of the wall
+    const c = cam.position; c.y = Math.max(c.y, 0.8); c.z = Math.max(c.z, -40); c.x = Math.min(170, Math.max(-170, c.x)); c.z = Math.min(c.z, 260);
+    const t = controls.target; t.x = Math.min(90, Math.max(-90, t.x)); t.y = Math.min(100, Math.max(-1, t.y)); t.z = Math.min(45, Math.max(-46, t.z));
+    room.tick(el, dt, cam);
     const ri = Math.round(p); label.textContent = SPREADS[ri]; dots.forEach((d, i) => d.classList.toggle('on', i === ri));
     hud.querySelector('.prev').disabled = ri === 0; hud.querySelector('.next').disabled = ri === N;
     renderer.render(scene, cam);
     first = false;
     requestAnimationFrame(frame);
   }
-  window.__book = { cam: () => ({ o: ortho.position.toArray(), l: ortho.left, r: ortho.right, w: innerWidth, h: innerHeight, cw: canvas.width, ccw: canvas.clientWidth }), set: (pp, opts = {}) => { target = p = pp; Object.assign(view, opts); }, view, get p() { return p; } };
+  window.__book = { cam, controls, set: pp => { target = p = pp; }, get p() { return p; } };
   document.body.classList.add('ready');
   requestAnimationFrame(frame);
 }

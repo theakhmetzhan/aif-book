@@ -1,7 +1,8 @@
 // The physical book: boards, page sheets that bend as they turn, page blocks, pop-ups per face.
 import * as THREE from 'three';
 import { FACES, SHEETS } from './pages.js';
-import { BUILDERS, setRise } from './popups.js';
+import { BUILDERS, setRise, animate } from './popups.js';
+import { T } from './theme.js';
 import { edgeTexture, clothFill } from './paper.js';
 
 export const PW = 14, PH = 20, BW = 14.5, BH = 20.8, BT = 0.2, BLOCK = 1.0, SEG = 64;
@@ -26,11 +27,11 @@ export class Book {
     this.sheets = []; this.popups = {};
     const edge = new THREE.CanvasTexture(edgeTexture()); edge.colorSpace = THREE.SRGBColorSpace;
     // page blocks (thickness of the unseen pages)
-    const blockMat = [new THREE.MeshStandardMaterial({ map: edge, roughness: 0.95 }), new THREE.MeshStandardMaterial({ color: '#efe6d2', roughness: 0.95 })];
+    const blockMat = [new THREE.MeshStandardMaterial({ map: edge, roughness: 0.95 }), new THREE.MeshStandardMaterial({ color: T.paper, roughness: 0.95 })];
     const mkBlock = () => { const m = new THREE.Mesh(new THREE.BoxGeometry(PW - 0.05, 1, PH - 0.1), [blockMat[0], blockMat[0], blockMat[1], blockMat[1], blockMat[0], blockMat[0]]); m.castShadow = m.receiveShadow = true; this.group.add(m); return m; };
     this.blockR = mkBlock(); this.blockL = mkBlock();
     // spine (visible when the book is closed)
-    const sc = document.createElement('canvas'); sc.width = 256; sc.height = 1024; clothFill(sc.getContext('2d'), 256, 1024);
+    const sc = document.createElement('canvas'); sc.width = 256; sc.height = 1024; clothFill(sc.getContext('2d'), 256, 1024, T.cloth);
     const spineTex = new THREE.CanvasTexture(sc); spineTex.colorSpace = THREE.SRGBColorSpace;
     this.spine = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, BH, 32, 1, true, Math.PI, Math.PI), new THREE.MeshStandardMaterial({ map: spineTex, roughness: 0.85, side: THREE.DoubleSide }));
     this.spine.rotation.x = Math.PI / 2; this.spine.castShadow = true; this.group.add(this.spine);
@@ -41,7 +42,7 @@ export class Book {
       const s = { i, front, back, isBoard, t: 0 };
       if (isBoard) {
         const pivot = new THREE.Group(); this.group.add(pivot);
-        const side = new THREE.MeshStandardMaterial({ color: '#232b45', roughness: 0.8 });
+        const side = new THREE.MeshStandardMaterial({ color: T.clothSide, roughness: 0.8 });
         const mf = new THREE.MeshStandardMaterial({ map: ft.map, roughness: ft.metal ? 0.75 : 0.9, metalness: 0, metalnessMap: ft.metal || null, roughnessMap: null });
         if (ft.metal) { mf.metalness = 1; mf.roughness = 0.42; mf.metalnessMap = ft.metal; mf.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', 'float roughnessFactor = roughness; roughnessFactor = mix(0.85, 0.38, texture2D(metalnessMap, vMetalnessMapUv).g);'); }; }
         const mb = new THREE.MeshStandardMaterial({ map: bt.map, roughness: 0.9 });
@@ -75,6 +76,7 @@ export class Book {
     });
     this.p = -1; this.set(0);
   }
+  animate(t) { for (const r of Object.values(this.popups)) animate(r, t); }
   // heights of the page blocks for progress p
   blocks(p) { const c = x => Math.min(1, Math.max(0, x)); return { L: BLOCK * c((p - 2) / (N - 3)), R: BLOCK * (1 - c((p - 1) / (N - 3))) }; }
   // world x-centre of what is visible (closed front → right block, open → spine, closed back → left)
