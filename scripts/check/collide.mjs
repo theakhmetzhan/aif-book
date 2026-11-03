@@ -3,7 +3,7 @@ import puppeteer from 'puppeteer-core';
 const b=await puppeteer.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:'new',args:['--use-angle=metal','--enable-gpu','--ignore-gpu-blocklist']});
 const p=await b.newPage(); await p.setViewport({width:800,height:500});
 const errs=[]; p.on('pageerror',e=>errs.push(e.message)); p.on('console',m=>['error','warn','warning'].includes(m.type())&&errs.push(m.text().slice(0,200)));
-await p.goto(''+(process.env.URL||"http://localhost:5181/aif-ushqyn/")+'?freeze=1&p=0',{waitUntil:'networkidle0'}); await p.waitForFunction(()=>document.body.classList.contains('ready'),{timeout:90000});
+await p.goto(''+(process.env.URL||"http://localhost:5181/aif-book/")+'?freeze=1&p=0',{waitUntil:'networkidle0'}); await p.waitForFunction(()=>document.body.classList.contains('ready'),{timeout:90000});
 const res=await p.evaluate(async ()=>{
   const B=__book.book, THREE_V=(x,y,z)=>({x,y,z});
   const PW=14, PH=20, ST=0.15, BW=14.5, BT=0.2;

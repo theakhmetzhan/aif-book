@@ -75,8 +75,8 @@ async function start() {
     book: () => { const ri = Math.round(target), shut = ri === 0 || ri === N, a = innerWidth / innerHeight;
       const hw = shut ? 8.6 : a < 0.8 ? 8.4 : 16.2; const tx = !shut && a < 0.8 ? (ri === 1 ? 7.2 : -7.2) : 0; // a phone reads one page at a time: the text page
       return { target: new THREE.Vector3(tx, DESK_Y + 2.2, 1.2), r: fitR(hw, 12.5), th: 0, ph: 0.6 }; },
-    // the whole setup: the board and the desk in front of it, seen from a step back and a little above
-    room: () => ({ target: new THREE.Vector3(0, 42, -4), r: fitR(BOARD.w / 2 + 12, 65), th: -0.05, ph: 1.34 }),
+    // the whole setup: the board and the desk in front of it, straight on from a step back, eyes a little above the desk
+    room: () => ({ target: new THREE.Vector3(0, 26, -4), r: fitR(BOARD.w / 2 + 4, 67), th: 0, ph: 1.49 }),
   };
   const goView = (name, instant = false) => { view = name; userMoved = false; instant ||= reduced; const h = views[name](); rig.home = name === 'desk' ? h.target.clone() : rig.home; rig.set(h.target, h, instant); markView(); unlock(); };
   let markView = () => {};
@@ -139,6 +139,7 @@ async function start() {
   // created up front so the first gesture can start it synchronously (Safari only unlocks audio inside the gesture)
   const audio = new Ambience({ camera: cam, positions: room.positions, enabled: soundOn });
   room.events.lightning = km => audio.thunder(km);
+  book.events.sheet = e => audio.sheet(e); // turn sounds follow each sheet's lift and landing
   function unlock() { audio.unlock(); }
   const setSound = on => { sndB.setAttribute('aria-pressed', String(on)); sndB.querySelector('.lb').textContent = on ? 'Sound on' : 'Sound off'; try { localStorage.setItem('ev-sound', on ? 'on' : 'off'); } catch {} audio.setEnabled(on); unlock(); };
   sndB.onclick = () => setSound(sndB.getAttribute('aria-pressed') !== 'true');
@@ -167,7 +168,7 @@ async function start() {
   });
 
   // ---------- loop ----------
-  const clock = new THREE.Timer(); let first = true, lastSide = 0, shadowTick = 0, calm = 0, shown = -1; const ft = [];
+  const clock = new THREE.Timer(); let first = true, shadowTick = 0, calm = 0, shown = -1; const ft = [];
   const freeze = !!qs.get('freeze'), tFix = qs.get('t') ? +qs.get('t') : null; room.freeze = freeze;
   if (freeze) { p = target = +(qs.get('p') ?? 0); }
   function frame() {
@@ -177,10 +178,6 @@ async function start() {
       const w = reduced ? 9 : 6.2; pv += (w * w * (target - p) - 2 * w * pv) * dt; pv = Math.max(-5, Math.min(5, pv)); p += pv * dt;
       if (Math.abs(target - p) < 1e-4 && Math.abs(pv) < 1e-3) { p = target; pv = 0; }
     }
-    // turning sounds as each sheet leaves its stack
-    const side = Math.floor(p + 0.5); if (side !== lastSide && !first) { audio.pageTurn(Math.min(2, 0.6 + Math.abs(pv) * 0.4)); lastSide = side; } else if (first) lastSide = side;
-    // the pop-ups fold and unfold near the start and end of each turn: paper rustle in proportion to how fast
-    { const f = p - Math.floor(p); if (Math.abs(pv) > 0.15 && (f > 0.04 && f < 0.3 || f > 0.7 && f < 0.96)) audio.paper(Math.min(1, Math.abs(pv) * 0.45)); }
     hoverK += ((Math.abs(target - p) < 0.02 ? hover : 0) - hoverK) * (1 - Math.exp(-dt * 10));
     book.set(+p.toFixed(5), el, hoverK);
     book.group.position.x = -book.centerX(p);

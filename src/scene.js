@@ -96,6 +96,9 @@ function desk(scene, out, surf) {
   else { const map = woodTexture(1024, 512); map.wrapS = map.wrapT = THREE.RepeatWrapping;
     top = new THREE.MeshPhysicalMaterial({ map, roughness: 0.48, clearcoat: 0.55, clearcoatRoughness: 0.32, metalness: 0 });
     side = new THREE.MeshPhysicalMaterial({ map, color: '#9a8a80', roughness: 0.5, clearcoat: 0.4, clearcoatRoughness: 0.35 }); }
+  // the varnish mirrors the real lamp only: the environment's lamp stand-in sits off to the left, so across a 190 cm top it
+  // outlined the left edges alone. (three ignores envMapIntensity on materials that fall back to scene.environment.)
+  for (const mt of [top, side]) { mt.envMap = scene.environment; mt.envMapIntensity = 0; }
   const m = new THREE.Mesh(new RoundedBoxGeometry(190, 4.5, 92, 4, 0.8), [top]);
   m.material = top; m.position.set(0, DESK_Y - 2.25, WALL_Z + 46); m.receiveShadow = true; m.castShadow = true; scene.add(m);
   const apron = new THREE.Mesh(new RoundedBoxGeometry(184, 10, 86, 2, 0.4), side); apron.position.set(0, DESK_Y - 9.5, WALL_Z + 46); scene.add(apron);
@@ -238,7 +241,7 @@ function evidenceBoard(group, mobile, card, out) {
   // the brief's rubric
   item('rubric', 15, 16, 19, 22, 0.02, (g, p) => {
     g.fillStyle = T.ink; g.font = `${B} ${1.15 * p}px ${SERIF}`; g.fillText('EVALUATION · 100', 1.2 * p, 2.4 * p);
-    const rows = [['Content coverage', 20, 0], ['Scientific accuracy', 25, 1], ['Clarity, education', 20, 0], ['Creativity', 15, 1], ['Design, organisation', 10, 1], ['Presentation, defence', 10, 0]];
+    const rows = [['Content coverage', 20, 0], ['Scientific accuracy', 25, 1], ['Clarity, education', 20, 1], ['Creativity', 15, 1], ['Design, organisation', 10, 1], ['Presentation, defence', 10, 0]];
     rows.forEach(([t, pt, ok], i) => { const yy = 4.8 + i * 2.6; g.fillStyle = T.ink; g.font = `400 ${0.95 * p}px ${SERIF}`; g.fillText(t, 1.2 * p, yy * p); g.textAlign = 'right'; g.fillText(String(pt), 17.6 * p, yy * p); g.textAlign = 'left';
       g.strokeStyle = 'rgba(0,0,0,.2)'; g.lineWidth = 0.06 * p; g.beginPath(); g.moveTo(1.2 * p, (yy + 0.7) * p); g.lineTo(17.8 * p, (yy + 0.7) * p); g.stroke();
       if (ok) { g.strokeStyle = T.accent; g.lineWidth = 0.22 * p; g.beginPath(); g.moveTo(13.2 * p, (yy - 0.5) * p); g.lineTo(13.8 * p, (yy + 0.1) * p); g.lineTo(15 * p, (yy - 1.0) * p); g.stroke(); } });
@@ -516,7 +519,7 @@ function lights(scene, renderer, mobile, out) {
   // the window: cool night light through venetian blinds with rain on the glass
   const win = new THREE.SpotLight('#8fa6d6', 56000, 460, 0.44, 0.45, 2);
   win.position.copy(WINDOW); win.target.position.set(6, 28, -30); win.castShadow = true; win.shadow.mapSize.set(1024, 1024); win.shadow.bias = -0.0003; win.shadow.normalBias = 0.06; win.shadow.radius = 2;
-  const rain = rainGobo(renderer, mobile, out); win.map = rain.texture; win.intensity /= rain.glass; scene.add(win, win.target); out.rain = rain;
+  const rain = rainGobo(renderer, mobile, out, win); win.map = rain.texture; win.intensity /= rain.glass; scene.add(win, win.target); out.rain = rain;
   ticks.push((t, dt) => rain.update(t, dt));
   // lightning, now and then: the window flashes, the room shows for an instant
   const flash = new THREE.DirectionalLight('#c9d6ff', 0); flash.position.copy(WINDOW); scene.add(flash);
@@ -535,7 +538,7 @@ function lights(scene, renderer, mobile, out) {
 // lens, so its shadow is a dark ring around a brighter core. Drops land and merge; once heavy enough they run down in
 // jerks, swallowing what they meet and leaving beads and a fading wet streak behind. Simulated in pixels of a 1024
 // square, drawn on the GPU into a render target that the spot projects.
-function rainGobo(renderer, mobile, out) {
+function rainGobo(renderer, mobile, out, win) {
   const S = mobile ? 512 : 1024, GLASS = 0.62; // the clear pane passes GLASS; a drop's focused core passes up to 1
   const [bc, bg] = cv(S, S);
   bg.fillStyle = '#000'; bg.fillRect(0, 0, S, S);
@@ -543,6 +546,14 @@ function rainGobo(renderer, mobile, out) {
   for (let y = 0; y < S; y += slat) { const gr = bg.createLinearGradient(0, y, 0, y + slat); gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.18, 'rgba(255,255,255,1)'); gr.addColorStop(0.62, 'rgba(255,255,255,1)'); gr.addColorStop(0.8, 'rgba(255,255,255,0)'); bg.fillStyle = gr; bg.fillRect(0, y, S, slat); }
   bg.fillStyle = '#000'; bg.fillRect(S * 0.49, 0, S * 0.025, S); bg.fillRect(0, S * 0.33, S, S * 0.02);
   const vg = bg.createRadialGradient(S / 2, S / 2, S * 0.2, S / 2, S / 2, S * 0.62); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,1)'); bg.fillStyle = vg; bg.fillRect(0, 0, S, S);
+  // the sill: the beam's lower edge lands on the foot of the board, so the desk and what stands on it get no window light
+  // (and so no rain). Black past the board's bottom edge as the spot projects it (its shadow camera), with a soft edge.
+  const sc = new THREE.PerspectiveCamera(THREE.MathUtils.RAD2DEG * 2 * win.angle, 1, 1, 1000); sc.position.copy(win.position); sc.lookAt(win.target.position); sc.updateMatrixWorld();
+  const px = (x, y, z) => { const v = new THREE.Vector3(x, y, z).project(sc); return [(v.x + 1) / 2 * S, (1 - v.y) / 2 * S]; };
+  const [ax, ay] = px(-100, BOARD.y0 - 3.4, BOARD.z + 0.7), [bx, by] = px(100, BOARD.y0 - 3.4, BOARD.z + 0.7), [dx, dy] = px(0, DESK_Y, 0);
+  const ang = Math.atan2(by - ay, bx - ax), side = (dy - ay) * Math.cos(ang) - (dx - ax) * Math.sin(ang) > 0 ? 1 : -1, soft = S * 0.012;
+  bg.save(); bg.translate(ax, ay); bg.rotate(ang); bg.scale(1, side);
+  const sg = bg.createLinearGradient(0, -soft, 0, 0); sg.addColorStop(0, 'rgba(0,0,0,0)'); sg.addColorStop(1, '#000'); bg.fillStyle = sg; bg.fillRect(-2 * S, -soft, 4 * S, 4 * S); bg.restore();
   const blinds = ctex(bc);
 
   const rt = new THREE.WebGLRenderTarget(S, S, { depthBuffer: false, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter });

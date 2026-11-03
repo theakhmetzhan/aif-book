@@ -624,9 +624,10 @@ function pinTin(M) {
   for (const ctx of [g, mg]) { ctx.save(); ctx.fillStyle = ctx === g ? '#d7b46a' : '#fff'; ctx.fillRect(0, y0 + 10, 2048, 4); ctx.fillRect(0, y1 - 14, 2048, 4); ctx.font = `700 ${(y1 - y0) * 0.36}px ${SERIF}`; ctx.textBaseline = 'middle'; const txt = 'PUSH PINS  ·  STEEL POINTS  ·  100  ·  '; let x = 10; while (x < 2048) { ctx.fillText(txt, x, (y0 + y1) / 2 + 2); x += ctx.measureText(txt).width; } ctx.restore(); }
   const tinMat = new THREE.MeshPhysicalMaterial({ map: ctex(c), metalnessMap: ctex(mc, { srgb: false }), metalness: 1, roughness: 1, roughnessMap: M.tin.roughnessMap, clearcoat: 0.4, clearcoatRoughness: 0.2 });
   const tin = mesh(lathe(tp, 128), tinMat, { name: 'tin' });
-  // lid lying beside it, label up
+  // lid lying beside it, label up. The tin's top stops where the label starts: the label is the rest of the top (one
+  // surface, rims sharing vertices), not a disc a hair above a second one, which z-fights from across the room.
   const L = R + 0.13;
-  const lp = fillet([[0, 0.74], [L - 0.06, 0.74], [L - 0.06, 0.06], [L - 0.02, 0.0], [L + 0.03, 0.06], [L + 0.03, 0.72], [L - 0.06, 0.82], [0, 0.82]], [0, 0.03, 0.03, 0.02, 0.03, 0.06, 0.08, 0], 4);
+  const lp = fillet([[0, 0.74], [L - 0.06, 0.74], [L - 0.06, 0.06], [L - 0.02, 0.0], [L + 0.03, 0.06], [L + 0.03, 0.72], [L - 0.06, 0.82], [L - 0.12, 0.82]], [0, 0.03, 0.03, 0.02, 0.03, 0.06, 0.08, 0], 4);
   const lid = new THREE.Group(); lid.position.set(R + L + 0.55, 0, 0.8);
   lid.add(mesh(lathe(lp, 128), M.tin, { name: 'lid' }));
   const [lc, lg] = cnv(1024, 1024), [lmc, lmg] = cnv(1024, 1024); lg.translate(512, 512); lmg.translate(512, 512);
@@ -641,7 +642,7 @@ function pinTin(M) {
     ctx.fillStyle = ink === '#000' ? '#000' : '#651612'; ctx.font = `700 132px ${SERIF}`; ctx.fillText('PUSH', 0, -70); ctx.fillText('PINS', 0, 70);
     ctx.fillStyle = ink; ctx.font = `400 54px ${TYPE}`; ctx.fillText('— 100 —', 0, 200);
   }
-  const lidTop = new THREE.CircleGeometry(L - 0.12, 96); lidTop.rotateX(-Math.PI / 2); lidTop.translate(0, 0.8215, 0);
+  const lidTop = new THREE.CircleGeometry(L - 0.12, 128, -Math.PI / 2); lidTop.rotateX(-Math.PI / 2); lidTop.translate(0, 0.82, 0); // vertices on the lathe's
   const lu = lidTop.attributes.uv, lpos = lidTop.attributes.position; for (let i = 0; i < lu.count; i++) lu.setXY(i, 0.5 + lpos.getX(i) / (2 * (L - 0.12)), 0.5 - lpos.getZ(i) / (2 * (L - 0.12)));
   lid.add(mesh(lidTop, new THREE.MeshPhysicalMaterial({ map: ctex(lc), metalnessMap: ctex(lmc, { srgb: false }), metalness: 1, roughness: 0.32, clearcoat: 0.6, clearcoatRoughness: 0.12 }), { name: 'lidLabel' }));
   lid.rotation.y = 0.6;

@@ -1,1 +1,1 @@
-export default { base: '/aif-ushqyn/', build: { chunkSizeWarningLimit: 1500 } };
+export default { base: '/aif-book/', build: { chunkSizeWarningLimit: 1500 } };

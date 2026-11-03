@@ -4,7 +4,7 @@ A 3D pop-up casebook of AI fundamentals, lying open on a detective's desk at nig
 
 Endterm project for AI Fundamentals (AIF1303), QAIRU, Fall 2026, by Akhmetzhan Turlybek. This edition contains Cases I–III.
 
-**Read it:** https://theakhmetzhan.github.io/aif-ushqyn/
+**Read it:** https://theakhmetzhan.github.io/aif-book/
 
 ## Controls
 - **Look around:** drag (one finger on a phone).

@@ -10,8 +10,8 @@ files were cut, filtered, levelled and re-encoded as mono MP3 with ffmpeg; the c
 | `thunder1.mp3`, `thunder2.mp3`, `thunder3.mp3` | three thunder peals, at 4.6 s, 67 s and 87.4 s of the original | [Storm thunderbolts.ogg](https://commons.wikimedia.org/wiki/File:Storm_thunderbolts.ogg) (originally pdsounds.org) | stephan | Public domain (PD-author, PD-pdsounds.org) |
 | `thunder4.mp3` | a distant roll, 9–28 s of the original | [Rain thunder and other noises.ogg](https://commons.wikimedia.org/wiki/File:Rain_thunder_and_other_noises.ogg) (originally pdsounds.org) | ezwa | Public domain (PD-author, PD-pdsounds.org) |
 | `page1.mp3` | a page turning | [Turning a page.ogg](https://commons.wikimedia.org/wiki/File:Turning_a_page.ogg) (originally pdsounds.org) | planish | Public domain (PD-author, PD-pdsounds.org) |
-| `page2.mp3`, `page3.mp3`, `paper.mp3` | two page turns, and a bank of ten short paper-handling rustles | [Book paper pages assorted.ogg](https://commons.wikimedia.org/wiki/File:Book_paper_pages_assorted.ogg) (originally pdsounds.org) | stephan | Public domain (PD-author, PD-pdsounds.org) |
+| `page2.mp3`, `page3.mp3` | two page turns | [Book paper pages assorted.ogg](https://commons.wikimedia.org/wiki/File:Book_paper_pages_assorted.ogg) (originally pdsounds.org) | stephan | Public domain (PD-author, PD-pdsounds.org) |
 | `tick.mp3`, `tock.mp3` | one tick and one tock of a mechanical alarm clock | [Alarm clock ticking.ogg](https://commons.wikimedia.org/wiki/File:Alarm_clock_ticking.ogg) (originally pdsounds.org) | ezwa | Public domain (PD-author, PD-pdsounds.org) |
 
-Synthesized in `src/audio.js` with WebAudio, no file: raindrops ticking on the pane, the paper creaks, the page's landing
+Synthesized in `src/audio.js` with WebAudio, no file: raindrops ticking on the pane, the cover's landing
 thump, and the room reverb.

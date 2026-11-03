@@ -1,10 +1,10 @@
 // The office at night, heard from the desk: light rain outside, drops ticking on the pane, thunder far off now and
 // then, the desk clock, and the book's card pages. Kept sparse on purpose: a quiet room is what makes the rain read.
-// Recordings in public/audio (see CREDITS.md); the pane ticks, paper creaks and page thumps are synthesized.
+// Recordings in public/audio (see CREDITS.md); the pane ticks and the cover's thump are synthesized.
 // Units are centimetres, like the scene. Every public method is safe to call before unlock() or without audio.
 import * as THREE from 'three';
 
-const FILES = ['rain', 'thunder1', 'thunder2', 'thunder3', 'thunder4', 'page1', 'page2', 'page3', 'paper', 'tick', 'tock'];
+const FILES = ['rain', 'thunder1', 'thunder2', 'thunder3', 'thunder4', 'page1', 'page2', 'page3', 'tick', 'tock'];
 
 const dB = d => Math.pow(10, d / 20);
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -13,7 +13,7 @@ const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const LEVEL = {
   rain: dB(-10), drops: dB(-33),
   tick: dB(-17),
-  page: dB(-5), thump: dB(-20), paper: dB(-13), creak: dB(-25),
+  page: dB(-17), cover: dB(-12), thump: dB(-17),
   thunder: dB(-9), reverb: dB(-11),
 };
 
@@ -52,7 +52,7 @@ export class Ambience {
     this._base = base;
     this._r = mulberry32(seed ?? (Math.random() * 2 ** 32));
     this._buf = {}; this._loops = []; this._pending = new Set(); this._groups = {};
-    this._paperT = -1; this._pageLast = -1; this._acc = 0;
+    this._pageLast = -1; this._acc = 0;
     this.ready = Promise.resolve();
     this._onVis = e => this._safe(() => (e?.type === 'pagehide' ? this._sleep(0.05) : this._visibility()));
     this._kick = () => this._safe(() => this._resume());
@@ -99,43 +99,34 @@ export class Ambience {
     this._safe(() => { if (this._enabled) this._wake(); else this._sleep(0.5); });
   }
 
-  /** A stiff card page turning: swish, then a soft landing. speed 0.5 (slow) .. 2 (flicked). */
-  pageTurn(speed = 1) {
+  /** The book's sheet events: a sheet leaving its stack ('lift') or settling on one ('land'). A page is one quiet rustle
+   *  while it is in the air; a board sweeps lower and heavier, and thumps as it lands. */
+  sheet({ type, sheet, board } = {}) {
+    this._sheets ??= {}; // the rustle playing for each sheet in the air
     this._safe(() => {
       if (!this._live()) return;
-      const s = clamp(+speed || 1, 0.5, 2), ctx = this._ctx, r = this._r, t = ctx.currentTime + 0.01;
-      const names = ['page1', 'page2', 'page3'].filter(n => this._buf[n]);
-      if (!names.length) return;
-      let i = Math.floor(r() * names.length); if (names.length > 1 && i === this._pageLast) i = (i + 1) % names.length; this._pageLast = i;
-      const b = this._buf[names[i]], rate = clamp(0.84 + 0.13 * s, 0.9, 1.12) * (1 + (r() - 0.5) * 0.04);
-      const body = this._biquad('lowshelf', 260, 0.7, 3.5 - s), air = this._biquad('highshelf', 4500, 0.7, -2 + 1.5 * s);
-      const g = this._gain(LEVEL.page * dB(-5 + 5 * Math.log2(s + 1) / Math.log2(3)));
-      this._one(b, t, rate, body); body.connect(air).connect(g).connect(this._grp('page', this._spots.book));
-      // card landing on card: low, short, soft
-      this._one(this._bank.thump[Math.floor(r() * this._bank.thump.length)], t + (b.duration * 0.72) / rate, 0.9 + r() * 0.2, this._grp('page', this._spots.book), LEVEL.thump * (0.6 + 0.25 * s));
+      const now = this._ctx.currentTime, g = this._sheets[sheet];
+      if (g) { g.gain.setTargetAtTime(0, now, type === 'land' ? 0.05 : 0.02); delete this._sheets[sheet]; }
+      if (type === 'lift') this._sheets[sheet] = this._turn(board);
+      else if (type === 'land' && board) this._one(this._bank.thump[Math.floor(this._r() * this._bank.thump.length)], now, 0.9 + this._r() * 0.1, this._grp('page', this._spots.book), LEVEL.thump);
     });
   }
 
-  /** Pop-up paper unfolding or folding: rustle and fibre creak, amount 0..1. Rate-limited. */
-  paper(amount = 0.5) {
-    this._safe(() => {
-      if (!this._live()) return;
-      const a = clamp(+amount || 0, 0, 1); if (a < 0.03) return;
-      const ctx = this._ctx, r = this._r, now = ctx.currentTime;
-      if (now - this._paperT < 0.16 - 0.08 * a) return;
-      this._paperT = now;
-      const dest = this._grp('page', this._spots.book), b = this._buf.paper;
-      if (b) {
-        const dur = 0.14 + 0.5 * a * (0.6 + 0.4 * r()), rate = 0.85 + r() * 0.3, off = r() * Math.max(0, b.duration - dur * rate - 0.05);
-        const s = ctx.createBufferSource(); s.buffer = b; s.playbackRate.value = rate;
-        const e = this._gain(0), hp = this._biquad('highpass', 300 + 500 * (1 - a), 0.6);
-        s.connect(hp).connect(e).connect(dest);
-        const pk = LEVEL.paper * Math.pow(a, 0.8);
-        e.gain.setValueAtTime(0, now); e.gain.linearRampToValueAtTime(pk, now + 0.02); e.gain.setTargetAtTime(0, now + dur * 0.45, dur * 0.2);
-        s.start(now, off, dur * rate + 0.1); s.stop(now + dur + 0.6); this._track(s, [hp, e]);
-      }
-      if (r() < 0.2 + 0.6 * a) this._one(this._bank.creak[Math.floor(r() * this._bank.creak.length)], now + 0.02 + r() * 0.12, 0.85 + r() * 0.35, dest, LEVEL.creak * (0.4 + 0.6 * a));
-    });
+
+  _turn(board) {
+    if (!this._live()) return null;
+    const ctx = this._ctx, r = this._r, t = ctx.currentTime + 0.005;
+    const names = ['page1', 'page2', 'page3'].filter(n => this._buf[n]);
+    if (!names.length) return null;
+    let i = Math.floor(r() * names.length); if (names.length > 1 && i === this._pageLast) i = (i + 1) % names.length; this._pageLast = i;
+    const b = this._buf[names[i]], rate = (board ? 0.8 : 1) * (1 + (r() - 0.5) * 0.04);
+    b.__onset ??= onset(b);
+    // from the recording's first rustle, so the sound starts with the motion; soft-topped, and for a board lower and fuller
+    const tone = board ? this._biquad('lowshelf', 220, 0.7, 4) : this._biquad('lowpass', 5200, 0.6);
+    const g = this._gain(board ? LEVEL.cover : LEVEL.page);
+    this._one(b, t, rate, tone, null, Math.max(0, b.__onset - 0.03));
+    tone.connect(g).connect(this._grp('page', this._spots.book));
+    return g;
   }
 
   /** Lightning just flashed distanceKm away: the thunder arrives distance / 0.343 s later. */
@@ -193,13 +184,13 @@ export class Ambience {
   _solo(names) { for (const g of Object.values(this._groups)) g.gain.value = names.includes(g.__group) ? 1 : 0; this._soloed = names; }
   _track(s, nodes = []) { this._pending.add(s); s.onended = () => { this._pending.delete(s); try { s.disconnect(); nodes.forEach(n => n.disconnect()); } catch { /* fine */ } }; }
   /** One-shot buffer at time t. Returns nothing; connects to dest (optionally through a gain). */
-  _one(buf, t, rate = 1, dest, gain) {
+  _one(buf, t, rate = 1, dest, gain, offset = 0) {
     if (!buf || !dest) return;
     const ctx = this._ctx, s = ctx.createBufferSource(); s.buffer = buf; s.playbackRate.value = rate;
     let out = s, g = null;
     if (gain != null) { g = this._gain(gain); s.connect(g); out = g; }
     out.connect(dest);
-    s.start(Math.max(t, ctx.currentTime)); this._track(s, g ? [g] : []);
+    s.start(Math.max(t, ctx.currentTime), offset); this._track(s, g ? [g] : []);
   }
   _ramp(to, dur) { const g = this._master.gain, t = this._ctx.currentTime; this._target = to; g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(to, t + dur); }
 
@@ -395,13 +386,7 @@ export class Ambience {
     return {
       // a raindrop hitting the pane
       drop: bank(10, () => make(0.04, (d, n) => { modes(d, n, 0, [[2400 + r() * 3200, 0.35, 0.0035, r() * 6]], 1, 0.0008, 0.6); })),
-      // card fibres giving: a quick stick-slip run of tiny clicks
-      // (noise clicks of random colour and spacing, so the run never settles on a pitch)
-      creak: bank(6, () => make(0.4, (d, n) => {
-        let t = 0.005; const k = 8 + Math.floor(r() * 18);
-        for (let j = 0; j < k; j++) { modes(d, n, t, [], 0.3 + r() * 0.7, 0.0004 + r() * 0.0012, 0.15 + r() * 0.7); t += 0.004 + Math.pow(r(), 2) * 0.05; if (t > 0.36) break; }
-      })),
-      // a card page settling flat: low and soft
+      // a board settling flat: low and soft
       thump: bank(3, () => make(0.16, (d, n) => { modes(d, n, 0.002, [[65 + r() * 25, 0.6, 0.035, 0], [150 + r() * 60, 0.25, 0.02, 0]], 1, 0.02, 0.025); })),
     };
   }

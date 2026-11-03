@@ -12,6 +12,7 @@ export const PW = 14, PH = 20, BW = 14.3, BH = 20.6, BT = 0.2, ST = 0.13;
 const N = SHEETS.length, NI = N - 2;
 const HINGE = 0; // boards hinge at the spine edge of the block and overhang it by a square elsewhere
 export const G0 = 0.07; // pages start this far from the hinge axis, so a turning page's corners never enter either stack
+const REST = 0.01; // a sheet within this angle of flat lies on its stack
 const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const turnEase = t => t - Math.sin(2 * Math.PI * t) / (2 * Math.PI); // eases in and out of each turn
 const smin = (a, b, k = 0.07) => -k * Math.log(Math.exp(-a / k) + Math.exp(-b / k));
@@ -24,7 +25,7 @@ export function faceTexture(name, renderer, extra, mobile) {
   Page.sink = []; try { f.draw(c.getContext('2d'), S, c.width, c.height, extra); } finally { f.read = Page.sink; Page.sink = null; }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter;
   let metal = null;
-  if (f.gold) { const m = document.createElement('canvas'); m.width = c.width; m.height = c.height; f.gold(m.getContext('2d'), S, m.width, m.height); metal = new THREE.CanvasTexture(m); }
+  if (f.gold) { const m = document.createElement('canvas'); m.width = c.width; m.height = c.height; f.gold(m.getContext('2d'), S, m.width, m.height); metal = new THREE.CanvasTexture(m); metal.anisotropy = t.anisotropy; }
   return { map: t, metal, canvas: c };
 }
 
@@ -52,7 +53,8 @@ export class Book {
       if (isBoard) {
         const cloth = (tx) => {
           const m = new THREE.MeshPhysicalMaterial({ map: tx.map, roughness: 0.78, sheen: 0.6, sheenRoughness: 0.6, sheenColor: new THREE.Color('#7a3a30') });
-          if (tx.metal) { m.metalness = 1; m.metalnessMap = tx.metal; m.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', 'float roughnessFactor = mix(0.82, 0.32, texture2D(metalnessMap, vMetalnessMapUv).g);'); }; }
+          // foil: part metal so its gold base still shows in a dark room (full metal mirrors the black ceiling), pressed into the cloth
+          if (tx.metal) { m.metalness = 0.6; m.metalnessMap = tx.metal; m.bumpMap = tx.metal; m.bumpScale = -1; m.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', 'float roughnessFactor = mix(0.82, 0.32, texture2D(metalnessMap, vMetalnessMapUv).g);'); }; }
           return m;
         };
         const paperFace = tx => new THREE.MeshStandardMaterial({ map: tx.map, roughness: 0.9 });
@@ -113,12 +115,22 @@ export class Book {
     const lt = new THREE.CanvasTexture(lc); lt.colorSpace = THREE.SRGBColorSpace; lt.wrapS = lt.wrapT = THREE.RepeatWrapping;
     const fillMat = new THREE.MeshStandardMaterial({ map: lt, roughness: 0.95 });
     this.fillers = [];
-    for (let k = 1; k < N - 1; k++) {
-      if (!this.faces.some(f => f.spread === k)) continue;
-      const g = this.gaps[k] - 0.012, m = new THREE.Mesh(new THREE.BoxGeometry(PW - 0.12, g, PH - 0.16), [fillMat, fillMat, hidden, hidden, fillMat, fillMat]);
-      m.position.set(G0 + (PW - 0.12) / 2, this.sheets[k].top + 0.006 + g / 2, 0); m.castShadow = m.receiveShadow = true;
-      lt.repeat.set(1, g / 0.05); this.sheets[k].pivot.add(m); this.fillers.push({ k, m });
+    // flush with the page edges and just overlapping both pages: an inset or a slit leaves lit paper thinner than a pixel,
+    // which shimmers along the block whenever the view moves
+    for (let k = 1; k < N; k++) {
+      const pop = this.faces.some(f => f.spread === k), mat = pop ? fillMat : edgeMat;
+      const g = this.gaps[k] + 0.002, m = new THREE.Mesh(new THREE.BoxGeometry(PW, g, PH), [mat, mat, hidden, hidden, mat, mat]);
+      m.position.set(G0 + PW / 2, this.sheets[k].top + this.gaps[k] / 2, 0); m.castShadow = m.receiveShadow = true;
+      if (pop) lt.repeat.set(1, g / 0.05);
+      this.sheets[k].pivot.add(m); this.fillers.push({ k, m });
     }
+    // the gutter: the bound backs of the two stacks, from the boards up to the top page on each side, so the spine end of
+    // the block is paper rather than a slot down to the endpapers
+    this.gutter = [-1, 1].map(side => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(G0, 1, PH), side < 0 ? [edgeMat, hidden, edgeMat, hidden, edgeMat, edgeMat] : [hidden, edgeMat, edgeMat, hidden, edgeMat, edgeMat]);
+      m.position.x = side * G0 / 2; m.castShadow = m.receiveShadow = true; this.group.add(m); return m;
+    });
+    this.events = {}; // events.sheet({ type: 'lift' | 'land', sheet, board }) as a sheet leaves or reaches a stack
     // cloth spine, a flexible strip joining the two boards' hinge edges
     const sc = document.createElement('canvas'); sc.width = 1024; sc.height = 256; clothFill(sc.getContext('2d'), 1024, 256, T.cloth);
     const sg = sc.getContext('2d'); sg.save(); sg.translate(512, 128); sg.fillStyle = goldGradient(sg, -300, 0, 300, 0); sg.font = '700 74px "Playfair Display", serif'; sg.textAlign = 'center'; sg.textBaseline = 'middle'; sg.letterSpacing = '14px'; sg.fillText('EVIDENCE', 0, 4); sg.restore();
@@ -168,19 +180,31 @@ export class Book {
     return { P, u, n };
   }
 
-  // lift > 0 raises the right-hand page's edge a little (a hint that it turns), lift < 0 the left-hand one
-  set(p, time = 0, lift = 0) {
-    this.p = p; const k = Math.round(p), near = Math.abs(p - k) < 0.02;
+  // pages do not lift on hover (a third, hover argument is ignored): a lifted page opens a wedge in the block and squeezes
+  // the pop-ups on the facing page flat
+  set(p, time = 0) {
+    this.p = p; let hL = 0, hR = 0;
     for (const s of this.sheets) {
       const t = Math.min(1, Math.max(0, p - s.i)); s.t = t; const e = turnEase(t);
-      s.theta = Math.PI * e;
-      if (near && lift > 0 && s.i === k && k < N) s.theta += 0.075 * lift;
-      if (near && lift < 0 && s.i === k - 1 && k >= 1) s.theta += 0.075 * lift;
+      const was = s.theta; s.theta = Math.PI * e;
       // the spine end only ever moves away from the stack the page is over: it rises while the page is still over the
       // right-hand stack, and comes down only once the page is over the left-hand one
       const slide = s.yL > s.yR ? sstep(0.02, 0.5, e) : sstep(0.5, 0.98, e);
       s.pivot.position.y = s.yR + (s.yL - s.yR) * slide; s.pivot.rotation.z = s.theta;
+      const onR = s.theta <= REST, onL = s.theta >= Math.PI - REST, wasOn = was <= REST || was >= Math.PI - REST;
+      if (wasOn !== (onR || onL)) this.events.sheet?.({ type: wasOn ? 'lift' : 'land', sheet: s.i, board: s.isBoard });
+      if (!s.isBoard && onR) hR = Math.max(hR, s.pivot.position.y + s.top);
+      if (!s.isBoard && onL) hL = Math.max(hL, s.pivot.position.y - s.bot);
     }
+    // a page in the air swings its spine end across the gutter while its hinge is still sliding: keep the gutter below it
+    for (const s of this.sheets) {
+      if (s.isBoard || s.theta <= REST || s.theta >= Math.PI - REST) continue;
+      const c = Math.cos(s.theta), sn = Math.sin(s.theta), y0 = s.pivot.position.y;
+      const ends = [s.bot, s.top].map(y => [G0 * c - y * sn, y0 + G0 * sn + y * c]);
+      if (ends[0][0] * ends[1][0] < 0) { hL = Math.min(hL, y0 + G0 / sn); hR = Math.min(hR, y0 + G0 / sn); } // the end crosses x = 0 there
+      for (const [x, y] of ends) { if (x < 0 && x > -G0) hL = Math.min(hL, y); else if (x > 0 && x < G0) hR = Math.min(hR, y); }
+    }
+    for (const [m, h] of [[this.gutter[0], hL], [this.gutter[1], hR]]) { m.visible = h > 0; m.scale.y = Math.max(h, 1e-4); m.position.y = h / 2; }
     // pop-ups
     for (const f of this.faces) {
       const k = f.spread, L = this.sheets[k - 1], R = this.sheets[k];
@@ -199,8 +223,9 @@ export class Book {
         const h = Math.min(hmax(d0), hmax(d1)) - (pc.layer + pc.span) * (CARD + 0.0015);
         phiMax = Math.min(phiMax, Math.asin(Math.min(1, Math.max(0, h / pc.H))));
       }
+      // flat while a page of the spread is in the air; they stand up only as it settles, and fold as soon as it lifts
       const u = Math.min(1, Math.max(0, alpha / Math.PI));
-      const mech = Math.PI / 2 * (1 - Math.pow(1 - u, 2.2));
+      const mech = Math.PI / 2 * sstep(0.9, 1, u);
       let phi = Math.max(0, smin(mech, phiMax));
       if (u > 0.999) phi = Math.min(phi, Math.PI / 2 - 0.006 * (1 + Math.sin(time * 0.6 + f.phase))); // a faint draft
       for (const pc of f.pieces) setPieceFold(pc, phi);

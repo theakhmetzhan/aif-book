@@ -6,7 +6,7 @@ import graph from './data/graph.json';
 import hills from './data/hills.json';
 import contours from './data/contours.json';
 
-export const BOOK_URL = 'https://theakhmetzhan.github.io/aif-ushqyn/';
+export const BOOK_URL = 'https://theakhmetzhan.github.io/aif-book/';
 export const TITLE_TXT = 'EVIDENCE', SUB_TXT = 'A Casebook of Artificial Intelligence', AUTHOR = 'Akhmetzhan Turlybek';
 export const C = { cream: T.cream, white: T.white, kraft: T.kraft, indigo: T.accent2, terracotta: T.accent, ochre: T.ochre, grey: T.grey, ink: T.ink, paper: T.paper };
 const B = T.bold, NOIR = T.name === 'noir';
@@ -289,7 +289,7 @@ export const FACES = {
       P.para('**Sources.** S. Russell and P. Norvig, *Artificial Intelligence: A Modern Approach*, 4th ed.; AIF1303 lectures, weeks 1–3; P. Hart, N. Nilsson and B. Raphael, “A Formal Basis for the Heuristic Determination of Minimum Cost Paths”, 1968.', {});
       P.para('**Numbers.** Every value in Exhibits 2.1–3.1 and in the tables was produced by running the algorithms described, in Python, and checked a second time in the book’s own code.', {});
       P.para('**Use of AI.** Generative AI (Claude, by Anthropic) was used to draft text, figures and code. All content was reviewed and verified against the sources above. The full declaration accompanies the submission.', {});
-      P.para('**Made with** three.js. Set in Courier Prime, Special Elite and Playfair Display. **Sound:** public-domain recordings from Wikimedia Commons (rain, thunder, pages, clock, distant city), the rest synthesised live in the browser; credits in audio/CREDITS.md.', {});
+      P.para('**Made with** three.js. Set in Courier Prime, Special Elite and Playfair Display. **Sound:** public-domain recordings from Wikimedia Commons (rain, thunder, pages, clock), the rest synthesised live in the browser.', {});
       P.gap(0.3); P.text(BOOK_URL.replace('https://', ''), P.x0, P.y, { font: `400 ${0.28 * S}px ${SERIF}`, color: ACCENT });
       stamp(g, S, 'CASE OPEN', 9.8, 17.4, { rot: -0.18, size: 0.5 });
     },

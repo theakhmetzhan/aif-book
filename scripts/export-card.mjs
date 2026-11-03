@@ -1,5 +1,5 @@
 // Export the Book Presentation Card to PNG: 1920×1080 and 3840×2160 (@2x), read straight from the canvas.
-// Uses the running dev server (default http://localhost:5181/aif-ushqyn/card.html, override with CARD_URL);
+// Uses the running dev server (default http://localhost:5181/aif-book/card.html, override with CARD_URL);
 // starts a temporary Vite server if none answers.  Usage: node scripts/export-card.mjs [outDir]
 import puppeteer from 'puppeteer-core';
 import { writeFile, mkdir } from 'node:fs/promises';
@@ -9,7 +9,7 @@ import path from 'node:path';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.resolve(process.argv[2] || '/Users/akhmetzhanturlybek/HQ/Fronts/academics/courses/aif-1303/assessments');
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-let url = process.env.CARD_URL || 'http://localhost:5181/aif-ushqyn/card.html';
+let url = process.env.CARD_URL || 'http://localhost:5181/aif-book/card.html';
 
 let server = null;
 try { const r = await fetch(url); if (!r.ok) throw new Error(r.status); }
