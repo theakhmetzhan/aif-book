@@ -107,7 +107,8 @@ export class Ambience {
       if (!this._live()) return;
       const now = this._ctx.currentTime, g = this._sheets[sheet];
       if (g) { g.gain.setTargetAtTime(0, now, type === 'land' ? 0.05 : 0.02); delete this._sheets[sheet]; }
-      if (type === 'lift') this._sheets[sheet] = this._turn(board);
+      this._early = null;
+      if (type === 'lift') { this._sheets[sheet] = this._turn(board); if (!this._sheets[sheet]) this._early = { sheet, board }; } // recordings still decoding: start once they arrive
       else if (type === 'land' && board) this._one(this._bank.thump[Math.floor(this._r() * this._bank.thump.length)], now, 0.9 + this._r() * 0.1, this._grp('page', this._spots.book), LEVEL.thump);
     });
   }
@@ -226,7 +227,7 @@ export class Ambience {
     const ctx = this._ctx;
     const decode = ab => new Promise((res, rej) => { const p = ctx.decodeAudioData(ab, res, rej); if (p?.then) p.then(res, rej); });
     return Promise.all(FILES.map(n => fetch(this._base + n + '.mp3').then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(n)))).then(decode)
-      .then(b => { this._buf[n] = b; }).catch(() => { /* that sound stays out */ })));
+      .then(b => { this._buf[n] = b; const e = this._early; if (e && n.startsWith('page')) this._safe(() => { this._early = null; this._sheets[e.sheet] = this._turn(e.board); }); }).catch(() => { /* that sound stays out */ })));
   }
 
   // ------------------------------------------------------------------ the graph
