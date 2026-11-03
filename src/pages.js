@@ -51,7 +51,7 @@ function ring(g, S, x, v, r) {
 }
 
 // ---------- shared figure data ----------
-export const FIG11 = { agent: { x0: 4.2, x1: 9.8, v0: 6.6, v1: 9.6 }, env: { x0: 1.6, x1: 12.4, v0: 1.8, v1: 4.6 } };
+export const FIG11 = { agent: { x0: 4.4, x1: 9.6, v0: 8.6, v1: 11.0 }, env: { x0: 1.6, x1: 12.4, v0: 1.6, v1: 6.4 } };
 export const G = (() => {
   const N = graph.nodes, h = graph.h;
   const nodes = Object.keys(N).map(k => ({ id: k, x: N[k][0], v: N[k][1], h: h[k] }));
@@ -160,7 +160,7 @@ export const FACES = {
       P.text('How to read this casebook', P.x0, P.y + 0.7, { font: `${NOIR ? 700 : 600} ${0.7 * S}px ${TITLE}` }); P.y += 1.3;
       P.para('A detective and an AI system do the same job. Both take in evidence, follow leads, rule out what cannot be true, and act on the best explanation they have. This book treats the ideas of artificial intelligence as ten cases, in the order the AI Fundamentals course teaches them.', { dropcap: true });
       P.para('Each case opens one method: how an **agent** meets its world, how **search** follows a trail, how **local search** climbs toward better answers, and on to probability, learning and language models.', { indent: 0.6 });
-      P.para('Every exhibit stands up from its page. At desk level the exhibits tell the story; lean over the book and the pages underneath give the full explanation. Drag to move around the desk, pinch or ⌃-scroll to come closer, and scroll to turn the page.', { indent: 0.6 });
+      P.para('Every exhibit stands up from its page. At desk level the exhibits tell the story; lean over the book and the pages underneath give the full explanation. Drag to look around the desk, scroll or pinch to come closer, and click a page or press the arrow keys to turn it.', { indent: 0.6 });
       P.para('Every number in the exhibits was computed by running the algorithm the case describes, and checked a second time.', { indent: 0.6 });
       P.gap(0.4);
       P.text('A. T.', P.x1, P.y, { font: `italic 400 ${0.36 * S}px ${SERIF}`, color: INK2, align: 'right' });
@@ -188,12 +188,12 @@ export const FACES = {
   ch1: {
     side: 'L', num: 4, draw(g, S, w, h) {
       pageBase(g, w, h, 'right'); const P = new Page(g, S); runningHead(P, TITLE_TXT, 4, 'L');
-      P.y = 5.2; chapterHead(P, 'I', 'The Agent', 'Agents and environments');
-      P.para('Every investigation needs someone who can observe and act. In AI that someone is an **agent**: anything that perceives its environment through *sensors* and acts upon it through *actuators*. Everything it has perceived so far is its *percept sequence*; the *agent function* maps every percept sequence to an action, and the *agent program* implements it.', { dropcap: true });
-      P.para('A **rational agent** chooses the action expected to maximise its *performance measure*, given its percepts and what it knows. Rational is not omniscient: a good decision can still meet a bad outcome.', { indent: 0.6 });
-      P.para('Before choosing an algorithm, describe the task with **PEAS** (the four cards standing above):', { indent: 0.6, after: 0.06 });
-      P.table([['', 'A self-driving car'], ['**P**erformance', 'safety, travel time, comfort'], ['**E**nvironment', 'roads, traffic, weather'], ['**A**ctuators', 'steering, throttle, brakes'], ['**S**ensors', 'cameras, radar, lidar, GPS']], [3.3, P.w - 3.3], { size: 0.28, lead: 0.4 });
-      P.para('Designs grow with the world they face: a *simple reflex* agent applies rules to the current percept; a *model-based* agent keeps an internal state; *goal-based* and *utility-based* agents plan. Any of them can become a *learning* agent.', {});
+      P.y = 4.75; chapterHead(P, 'I', 'The Agent', 'Agents and environments');
+      P.para('Every investigation needs someone who can observe and act. In AI that is an **agent**: anything that perceives its environment through *sensors* and acts on it through *actuators*. The *agent function* maps each *percept sequence*, everything perceived so far, to an action; the *agent program* implements it.', { dropcap: true });
+      P.para('A **rational agent** picks the action expected to maximise its *performance measure*, given its percepts and knowledge. Rational is not omniscient.', { indent: 0.6 });
+      P.para('First describe the task with **PEAS**, the cards above:', { indent: 0.6, after: 0.06 });
+      P.table([['', 'A self-driving car'], ['**P**erformance', 'safety, travel time, comfort'], ['**E**nvironment', 'roads, traffic, weather'], ['**A**ctuators', 'steering, throttle, brakes'], ['**S**ensors', 'cameras, radar, lidar, GPS']], [3.3, P.w - 3.3], { size: 0.28, lead: 0.37 });
+      P.para('Designs grow with the world: *simple reflex* agents react to the current percept, *model-based* ones keep internal state, *goal-based* and *utility-based* ones plan, and any of them can *learn*.', {});
     },
     popup: 'peas',
   },
@@ -203,12 +203,13 @@ export const FACES = {
       const F = FIG11; g.strokeStyle = INK2; g.lineWidth = 0.03 * S;
       g.strokeRect(F.agent.x0 * S, F.agent.v0 * S, (F.agent.x1 - F.agent.x0) * S, (F.agent.v1 - F.agent.v0) * S);
       g.strokeRect(F.env.x0 * S, F.env.v0 * S, (F.env.x1 - F.env.x0) * S, (F.env.v1 - F.env.v0) * S);
-      P.text('AGENT', 7, 8.25, { font: `400 ${0.32 * S}px ${DISPLAY}`, color: INK, align: 'center', spacing: 0.1 });
-      P.text('ENVIRONMENT', 7, 3.35, { font: `400 ${0.32 * S}px ${DISPLAY}`, color: INK, align: 'center', spacing: 0.1 });
-      arrowPrint(g, S, [[11.2, 4.6], [11.2, 8.1], [9.8, 8.1]], ACCENT); arrowPrint(g, S, [[4.2, 8.1], [2.8, 8.1], [2.8, 4.6]], INDIGO);
-      P.text('percepts', 11.45, 6.3, { font: `${B} ${0.28 * S}px ${SERIF}`, color: ACCENT });
-      P.text('actions', 2.55, 6.3, { font: `${B} ${0.28 * S}px ${SERIF}`, color: INDIGO, align: 'right' });
-      exhibit(P, 'Exhibit 1.1 · the agent–environment loop', 'Percepts flow in through sensors; actions flow out through actuators. The agent program in between is the subject of the rest of this book.', 10.4);
+      P.text('AGENT', 7, (F.agent.v0 + F.agent.v1) / 2 + 0.12, { font: `400 ${0.32 * S}px ${DISPLAY}`, color: INK, align: 'center', spacing: 0.1 });
+      P.text('ENVIRONMENT', 7, (F.env.v0 + F.env.v1) / 2 + 0.12, { font: `400 ${0.32 * S}px ${DISPLAY}`, color: INK, align: 'center', spacing: 0.1 });
+      const am = (F.agent.v0 + F.agent.v1) / 2;
+      arrowPrint(g, S, [[11.2, F.env.v1], [11.2, am], [F.agent.x1, am]], ACCENT); arrowPrint(g, S, [[F.agent.x0, am], [2.8, am], [2.8, F.env.v1]], INDIGO);
+      P.text('percepts', 11.45, (F.env.v1 + am) / 2 + 0.1, { font: `${B} ${0.28 * S}px ${SERIF}`, color: ACCENT });
+      P.text('actions', 2.55, (F.env.v1 + am) / 2 + 0.1, { font: `${B} ${0.28 * S}px ${SERIF}`, color: INDIGO, align: 'right' });
+      exhibit(P, 'Exhibit 1.1 · the agent–environment loop', 'Percepts flow in through sensors; actions flow out through actuators. The agent program in between is the subject of the rest of this book.', 11.55);
       P.gap(0.1);
       P.text('SIX WAYS ENVIRONMENTS DIFFER', P.x0, P.y + 0.2, { font: `${B} ${0.22 * S}px ${SERIF}`, color: INDIGO, spacing: 0.04 }); P.y += 0.4;
       P.table([['', 'Chess + clock', 'Self-driving'], ['Observable', 'fully', 'partially'], ['Agents', 'multi', 'multi'], ['Outcomes', 'deterministic', 'stochastic'], ['Episodes', 'sequential', 'sequential'], ['Change', 'semi-dynamic', 'dynamic'], ['Actions', 'discrete', 'continuous']], [3.1, 4.0, P.w - 7.1], { size: 0.27, lead: 0.37 });
@@ -273,10 +274,10 @@ export const FACES = {
       pageBase(g, w, h, 'left', 4); const P = new Page(g, S); runningHead(P, 'Case III · The High Ground', 11, 'R');
       hillPrint(g, S);
       P.text('global max · 10.3', 9.0, 4.4, { font: `${B} ${0.27 * S}px ${SERIF}`, color: ACCENT, align: 'center' });
-      P.text('local max · 6.9', 2.0, 16.35, { font: `${B} ${0.27 * S}px ${SERIF}`, color: INDIGO });
+      g.save(); g.font = `${B} ${0.27 * S}px ${SERIF}`; g.textAlign = 'center'; g.lineJoin = 'round'; g.lineWidth = 0.12 * S; g.strokeStyle = T.paper; g.strokeText('local max · 6.9', 4.5 * S, 11.05 * S); g.fillStyle = INDIGO; g.fillText('local max · 6.9', 4.5 * S, 11.05 * S); g.restore();
       P.text('A', 1.55, 15.35, { font: `${B} ${0.3 * S}px ${SERIF}`, color: INDIGO });
       P.text('B', 12.0, 13.15, { font: `${B} ${0.3 * S}px ${SERIF}`, color: ACCENT });
-      exhibit(P, 'Exhibit 3.1 · hill climbing', 'The objective function cut into paper ridges, each one a slice of the same landscape. Climber A (blue) stops on the local maximum; climber B (red) reaches the global maximum. From above, the printed contours show the landscape as a map.', 16.75);
+      exhibit(P, 'Exhibit 3.1 · hill climbing', 'Paper ridges, each a slice of one landscape. Climber A (blue) stops on a local maximum; climber B (red) reaches the global one. The contours are the same landscape seen from above.', 16.4);
     },
     popup: 'hills',
   },
@@ -289,7 +290,7 @@ export const FACES = {
       P.para('**Sources.** S. Russell and P. Norvig, *Artificial Intelligence: A Modern Approach*, 4th ed.; AIF1303 lectures, weeks 1–3; P. Hart, N. Nilsson and B. Raphael, “A Formal Basis for the Heuristic Determination of Minimum Cost Paths”, 1968.', {});
       P.para('**Numbers.** Every value in Exhibits 2.1–3.1 and in the tables was produced by running the algorithms described, in Python, and checked a second time in the book’s own code.', {});
       P.para('**Use of AI.** Generative AI (Claude, by Anthropic) was used to draft text, figures and code. All content was reviewed and verified against the sources above. The full declaration accompanies the submission.', {});
-      P.para(`**Made with** three.js. Set in ${NOIR ? 'Courier Prime, Special Elite and Playfair Display' : 'Inter, Space Grotesk and JetBrains Mono'}. No living beings are depicted; the book has no music.`, {});
+      P.para('**Made with** three.js. Set in Courier Prime, Special Elite and Playfair Display. **Sound:** public-domain recordings from Wikimedia Commons (rain, thunder, pages, clock, distant city), the rest synthesised live in the browser; credits in audio/CREDITS.md.', {});
       P.gap(0.3); P.text(BOOK_URL.replace('https://', ''), P.x0, P.y, { font: `400 ${0.28 * S}px ${SERIF}`, color: ACCENT });
       stamp(g, S, 'CASE OPEN', 9.8, 17.4, { rot: -0.18, size: 0.5 });
     },

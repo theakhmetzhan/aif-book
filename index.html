@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>EVIDENCE · A Casebook of Artificial Intelligence</title>
 <meta name="description" content="A 3D pop-up casebook of AI fundamentals on a detective's desk. AIF1303 endterm project, QAIRU 2026.">
-<script>document.documentElement.dataset.mood=new URLSearchParams(location.search).get("mood")==="modern"?"modern":"noir"</script>
+
 <link rel="icon" href="./favicon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400&family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Inter:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@500&family=Playfair+Display:wght@400;700&family=Space+Grotesk:wght@500;600&family=Special+Elite&display=block" rel="stylesheet">
+<link href="./fonts/fonts.css" rel="stylesheet">
 </head>
 <body>
-<canvas id="gl"></canvas>
+<canvas id="gl" tabindex="0" role="img" aria-label="A detective’s desk at night with a pop-up casebook open on it. Use the page buttons or the arrow keys to turn the pages; the text of the open pages follows below for screen readers."></canvas>
+<main id="read" class="sr-only" aria-live="polite"></main>
 <div id="hud"></div>
 <div id="loader"><div class="t">EVIDENCE</div><div class="bar"><i></i></div></div>
 <script type="module" src="/src/main.js"></script>

@@ -21,13 +21,17 @@ function runs(text) {
 }
 const fontFor = (s, size, S, fam = SERIF) => s === 'b' ? `${B} ${size * S}px ${fam}` : s === 'i' ? `italic 400 ${size * S}px ${fam}` : s === 'm' ? `500 ${size * S * 0.86}px ${T.mono}` : `400 ${size * S}px ${fam}`;
 
+const plain = t => String(t).replace(/\*\*|`/g, '').replace(/\*/g, '').replace(/§/g, '*');
 export class Page {
+  static sink = null; // when an array, every piece of text set on any page is also recorded here (for the screen-reader copy)
+  static note(kind, text) { if (Page.sink && String(text).trim()) Page.sink.push({ kind, text: plain(text) }); }
   constructor(ctx, S, { left = 1.55, right = 1.55, top = 1.7, bottom = 2.0 } = {}) {
     this.c = ctx; this.S = S; this.x0 = left; this.x1 = 14 - right; this.y = top; this.yMax = 20 - bottom;
   }
   get w() { return this.x1 - this.x0; }
   font(f) { this.c.font = f; }
   text(str, x, y, { font, color = INK, align = 'left', spacing = 0, baseline = 'alphabetic' } = {}) {
+    if (!this._quiet) Page.note(/(\d+(\.\d+)?)px/.test(font) && +RegExp.$1 > 0.55 * this.S ? 'h' : 'x', str);
     const c = this.c, S = this.S; c.font = font; c.fillStyle = color; c.textBaseline = baseline;
     if (spacing) {
       c.letterSpacing = spacing * S + 'px';
@@ -40,6 +44,7 @@ export class Page {
   // justified paragraph with rich runs; returns height used
   para(text, { size = T.bodySize, lead = T.lead, indent = 0, justify = T.justify, color = INK, x0 = this.x0, x1 = this.x1, dropcap = false, fam = SERIF, after = 0.12 } = {}) {
     const c = this.c, S = this.S;
+    Page.note('p', text);
     // tokenise into words carrying style
     const words = [];
     for (const r of runs(text)) {
@@ -98,6 +103,7 @@ export class Page {
   // simple table: rows = [[cells]], first row header; widths in units
   table(rows, widths, { size = 0.33, lead = 0.46, head = INK2, zebra = T.zebra, align = [] } = {}) {
     const c = this.c, S = this.S; let y = this.y;
+    if (Page.sink) Page.sink.push({ kind: 'table', rows: rows.map(r => r.map(x => plain(String(x).replace(/^~/, '')))) });
     this.rule(y, { color: INK, w: 0.025 });
     rows.forEach((r, ri) => {
       const isH = ri === 0; let x = this.x0;

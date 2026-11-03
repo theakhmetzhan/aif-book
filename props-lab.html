@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Props lab · dev only</title>
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400&family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Playfair+Display:wght@400;600;700&family=Special+Elite&display=block" rel="stylesheet">
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0a09; overflow: hidden; color: #cbbf9f; font: 12px/1.4 ui-monospace, Menlo, monospace; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  #info { position: fixed; left: 10px; top: 8px; pointer-events: none; opacity: .75; white-space: pre; }
+  body.shot #info { display: none; }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="info">loading…</div>
+<script type="module" src="/src/props-lab.js"></script>
+</body>
+</html>

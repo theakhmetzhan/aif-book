@@ -1,11 +1,25 @@
 # EVIDENCE · A Casebook of Artificial Intelligence
 
-A 3D pop-up casebook of AI fundamentals, lying open on a detective's desk in front of the evidence board used to plan it. At desk level the paper exhibits tell the story; lean over the book and the pages beneath give the full explanation.
+A 3D pop-up casebook of AI fundamentals, lying open on a detective's desk at night, in front of the evidence board used to plan it. At desk level the paper exhibits tell the story; lean over the book and the pages beneath give the full explanation.
 
 Endterm project for AI Fundamentals (AIF1303), QAIRU, Fall 2026, by Akhmetzhan Turlybek. This edition contains Cases I–III.
 
-**Read it:** https://theakhmetzhan.github.io/aif-ushqyn/ · two moods: `?mood=noir` (default) and `?mood=modern`
+**Read it:** https://theakhmetzhan.github.io/aif-ushqyn/
 
-Controls: scroll, ← → or click a page to turn it · drag to look around · right-drag to move · pinch or ⌃-scroll to come closer · H returns to the desk view. On phones: drag to look, pinch to zoom, tap a page to turn.
+## Controls
+- **Look around:** drag (one finger on a phone).
+- **Come closer:** scroll, or pinch. It zooms toward whatever is under the pointer.
+- **Move sideways:** right-drag, shift-drag, or drag with two fingers.
+- **Turn a page:** click or tap the page, or press ← →. You can also use the buttons and dots at the bottom.
+- **Views:** the Desk / Read / Board buttons at the bottom right, or H (also Escape), R and B. Read leans over the open spread; on a phone it frames the text page.
+- **Keyboard camera:** ↑ ↓ tilt, A D orbit, + − zoom.
+- **Sound:** M, or the button at the top right. Sound starts after your first click.
+- **Screen readers:** the text of the open spread is mirrored into the page as plain HTML and announced when the spread changes.
 
-Develop: `npm i && npm run dev`. Figure data in `src/data/` is generated and checked in Python (`scripts/verify/`).
+## How it is built
+- **Pages:** stiff card that turns about the spine. Every pop-up piece is a rigid card hinged to its page by a glued tab.
+- **Folding:** all pieces on a page share one fold angle, set by the angle between the two pages of the spread. They stay inside their half of that wedge, so paper never passes through paper.
+- **Collision check:** `scripts/check/collide.mjs` runs every page turn and checks every pop-up and page vertex against every page.
+- **Figure data:** the data in `src/data/` is generated and checked in Python, in `scripts/verify/`.
+
+Develop: `npm i && npm run dev`. Third-party assets and sounds are credited in `public/assets/CREDITS.md` and `public/audio/CREDITS.md`. The fonts (SIL Open Font License) are served from `public/fonts/`.
