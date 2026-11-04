@@ -507,15 +507,16 @@ function lights(scene, renderer, mobile, out) {
   renderer.toneMappingExposure = 1.0;
   scene.add(new THREE.HemisphereLight('#2a3550', '#0a0705', 0.05)); // the night, barely
   // the banker's lamp: a warm pool on the desk and the book
-  const lamp = new THREE.SpotLight('#ffb36a', 8600, 190, 1.0, 0.9, 2);
-  // emit from just inside the shade's mouth (the shade itself casts shadows, and the bulb sits deep inside it)
-  lamp.position.copy(out.bulb); if (out.lampAim) lamp.position.addScaledVector(out.lampAim, 2.2);
-  lamp.target.position.set(3, 0, -3); lamp.castShadow = true;
-  lamp.shadow.mapSize.set(smap, smap); lamp.shadow.bias = -0.00015; lamp.shadow.normalBias = 0.02; lamp.shadow.radius = 5; lamp.shadow.camera.near = 2; lamp.shadow.camera.far = 170;
+  // the cone is the shade's own: down the shade's axis, as wide as its mouth lets the bulb see, so the pool lies under the lamp
+  const lamp = new THREE.SpotLight('#ffb36a', 8600, 190, 1.25, 0.3, 2);
+  lamp.position.copy(out.bulb);
+  if (out.lampAim) lamp.target.position.copy(lamp.position).addScaledVector(out.lampAim, 30); else lamp.target.position.set(3, 0, -3);
+  lamp.castShadow = true; // near skips the lamp's own head: a real bulb and its opal shade are far wider than the socket, this single point is not
+  lamp.shadow.mapSize.set(smap, smap); lamp.shadow.bias = -0.00015; lamp.shadow.normalBias = 0.02; lamp.shadow.radius = 5; lamp.shadow.camera.near = 12; lamp.shadow.camera.far = 170;
   scene.add(lamp, lamp.target);
   // warm bounce off the desk and the pages onto the board. A spot aimed up at the board, so nothing in front of it
   // (the desk's front edge, the props' faces) catches a highlight from a light that isn't there.
-  const bounce = new THREE.SpotLight('#ff9d55', 300, 130, 1.2, 1, 2); bounce.position.set(0, 6, -14); bounce.target.position.set(0, 44, -46); scene.add(bounce, bounce.target);
+  const bounce = new THREE.SpotLight('#ff9d55', 750, 130, 1.2, 1, 2); bounce.position.set(0, 6, -14); bounce.target.position.set(0, 44, -46); scene.add(bounce, bounce.target);
   // the window: cool night light through venetian blinds with rain on the glass
   const win = new THREE.SpotLight('#8fa6d6', 56000, 460, 0.44, 0.45, 2);
   win.position.copy(WINDOW); win.target.position.set(6, 28, -30); win.castShadow = true; win.shadow.mapSize.set(1024, 1024); win.shadow.bias = -0.0003; win.shadow.normalBias = 0.06; win.shadow.radius = 2;
@@ -531,6 +532,10 @@ function lights(scene, renderer, mobile, out) {
     win.intensity = baseWin * (1 + f * 7); win.color.setRGB(0.56 + f * 0.3, 0.65 + f * 0.25, 0.84 + f * 0.1); flash.intensity = f * 0.9;
   });
   out.lampObj?.userData.setGlow?.(1);
+  // the room's reflections put the lamp off to the left, right for everything else on the desk; the lamp's own brass sees it
+  // overhead. Satin, not polished: its light is a shade's whole mouth, which a single point would mirror as a blown-out dot.
+  if (out.lampObj) { const up = out.bulb.clone().sub(out.lampObj.position).normalize().multiplyScalar(2.9), env = roomEnvironment(renderer, up.toArray());
+    out.lampObj.traverse(m => { if (m.isMesh && m.material.metalness === 1) { m.material = m.material.clone(); Object.assign(m.material, { envMap: env, roughnessMap: null, roughness: 0.5, clearcoat: 0 }); } }); }
   out.lamp = lamp; out.win = win;
 }
 
@@ -648,10 +653,10 @@ function rainGobo(renderer, mobile, out, win) {
 }
 
 // a dim environment matching the room: the lamp's warm pool, the window's cool slats, black elsewhere (for reflections on brass, glass, varnish)
-export function roomEnvironment(renderer) {
+export function roomEnvironment(renderer, lampAt = [-2.2, 1.3, -1.4]) {
   const env = new THREE.Scene(); env.background = new THREE.Color('#020202');
   const box = new THREE.Mesh(new THREE.BoxGeometry(10, 6, 10), new THREE.MeshBasicMaterial({ color: '#050403', side: THREE.BackSide })); env.add(box);
-  const warm = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffb36a').multiplyScalar(14) })); warm.position.set(-2.2, 1.3, -1.4); env.add(warm);
+  const warm = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffb36a').multiplyScalar(14) })); warm.position.set(...lampAt); env.add(warm);
   const pool = new THREE.Mesh(new THREE.PlaneGeometry(4, 3), new THREE.MeshBasicMaterial({ color: new THREE.Color('#5a3a1c').multiplyScalar(1.2) })); pool.rotation.x = -Math.PI / 2; pool.position.set(0, -2.9, 0); env.add(pool);
   for (let i = 0; i < 6; i++) { const s = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 1.8 - 0.0), new THREE.MeshBasicMaterial({ color: new THREE.Color('#8fa6d6').multiplyScalar(2.2) })); s.position.set(4.95, 0.4 + i * 0.32 - 0.8, 1); s.rotation.y = -Math.PI / 2; s.scale.set(1, 1, 1); s.rotation.z = Math.PI / 2; env.add(s); }
   const pm = new THREE.PMREMGenerator(renderer); const tex = pm.fromScene(env, 0.02).texture; pm.dispose(); return tex;
