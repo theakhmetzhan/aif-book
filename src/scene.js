@@ -568,8 +568,9 @@ function lights(scene, renderer, mobile, out) {
 }
 
 // The window light's cookie: the blinds, and the rain on the pane in front of them. Each drop on the glass is a small
-// lens, so its shadow is a dark ring around a brighter core. Drops land and merge; once heavy enough they run down in
-// jerks, swallowing what they meet and leaving beads and a fading wet streak behind. Simulated in pixels of a 1024
+// lens, so its shadow is a dark ring around a brighter core. Drops land at once and merge; once heavy enough they run down
+// in jerks, swallowing what they meet and leaving beads and a fading wet streak behind. Nothing leaves in one frame: a swallowed
+// drop is drawn into the runner in a blink, and when the pane is full the oldest shrink and fade as they dry. Simulated in pixels of a 1024
 // square, drawn on the GPU into a render target that the spot projects.
 function rainGobo(renderer, mobile, out, win) {
   const S = mobile ? 512 : 1024, GLASS = 0.62; // the clear pane passes GLASS; a drop's focused core passes up to 1
@@ -621,11 +622,11 @@ function rainGobo(renderer, mobile, out, win) {
   const dm = new THREE.Mesh(geo, mat); dm.frustumCulled = false; dm.renderOrder = 1; gs.add(dm);
 
   // ---- the simulation, in px of a 1024 square, y up; a coarse grid keeps the neighbour tests cheap ----
-  const r = rng(55), P = 1024, MAXD = MAX - 400; let drops = []; const runs = [], streaks = [];
+  const r = rng(55), P = 1024, MAXD = MAX - 400, LIVE = MAXD - 240; let drops = []; const runs = [], streaks = []; // LIVE leaves room inside MAXD for the drops still fading
   const CELL = 24, GW = Math.ceil(P / CELL) + 4, grid = new Map();
   const cell = (x, y) => (Math.floor(y / CELL) + 2) * GW + Math.floor(x / CELL) + 2;
   const put = d => { const k = cell(d.x, d.y); let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(d); };
-  const near = (x, y, f) => { const cx = Math.floor(x / CELL) + 2, cy = Math.floor(y / CELL) + 2; for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) { const a = grid.get((cy + j) * GW + cx + i); if (a) for (const d of a) if (!d.dead && f(d)) return d; } return null; };
+  const near = (x, y, f) => { const cx = Math.floor(x / CELL) + 2, cy = Math.floor(y / CELL) + 2; for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) { const a = grid.get((cy + j) * GW + cx + i); if (a) for (const d of a) if (!d.dead && !d.gone && f(d)) return d; } return null; };
   const land = (x, y, rad) => {
     const d = near(x, y, d => (d.x - x) ** 2 + (d.y - y) ** 2 < (d.rad + rad) ** 2);
     if (d) { const a = d.rad ** 3, b = rad ** 3, v = a + b; d.x = (d.x * a + x * b) / v; d.y = (d.y * a + y * b) / v; d.rad = Math.cbrt(v); return d; }
@@ -633,18 +634,18 @@ function rainGobo(renderer, mobile, out, win) {
   };
   function startRun(d) { d.dead = true; runs.push({ x: d.x, y: d.y, rad: d.rad, seed: d.seed, moving: false, t: r() * 0.8, vx: 0, trav: 0, next: 6, sx: d.x, sy: d.y }); }
   const step = dt => {
-    grid.clear(); for (const d of drops) put(d);
+    grid.clear(); for (const d of drops) if (!d.gone) put(d);
     // rain landing on the pane: mostly fine droplets; drops that grow heavy, and now and then a fat one, start to run
     for (let n = Math.floor(dt * 120 + r()); n > 0; n--) { const d = land(r() * P, r() * P, 1.7 + Math.pow(r(), 2.6) * 3.4); if (d.rad > 5.4 && runs.length < 12) startRun(d); }
     if (r() < dt * 0.4 && runs.length < 12) startRun(land(r() * P, P * (0.3 + 0.75 * r()), 5.6 + r() * 1.8));
-    for (const d of drops) d.a = Math.min(1, d.a + dt * 3);
+    for (const d of drops) d.a = d.gone ? d.a - dt * d.gone : Math.min(1, d.a + dt * 14); // gone: the rate it fades out at
     for (let i = runs.length - 1; i >= 0; i--) {
       const q = runs[i];
       // stick-slip: a burst of sliding, then a pause while the drop gathers itself
       q.t -= dt; if (q.t < 0) { q.moving = !q.moving; q.t = q.moving ? 0.25 + r() * 0.9 : 0.15 + r() * (q.rad > 6.5 ? 0.6 : 1.8); q.vx = (r() - 0.5) * 10; }
       if (q.moving) {
         const v = (16 + (q.rad - 5) * 8) * (0.7 + r() * 0.6); q.y -= v * dt; q.x += q.vx * dt; q.trav += v * dt;
-        near(q.x, q.y, d => { if ((d.x - q.x) ** 2 + (d.y - q.y) ** 2 < (d.rad + q.rad * 0.9) ** 2) { q.rad = Math.cbrt(q.rad ** 3 + d.rad ** 3); d.dead = true; } return false; }); // swallow what it runs into
+        near(q.x, q.y, d => { if ((d.x - q.x) ** 2 + (d.y - q.y) ** 2 < (d.rad + q.rad * 0.9) ** 2) { q.rad = Math.cbrt(q.rad ** 3 + d.rad ** 3); d.gone = 9; } return false; }); // swallow what it runs into
         // leave a bead behind every so often, and a piece of wet streak
         if (q.trav > q.next) { const b = 1.2 + r() * 1.2; if (q.rad ** 3 - b ** 3 > 4.6 ** 3) { q.rad = Math.cbrt(q.rad ** 3 - b ** 3); const n = { x: q.x + (r() - 0.5) * 1.5, y: q.y + q.rad * 1.1, rad: b, ax: 1, seed: r(), a: 1 }; drops.push(n); put(n); } q.trav = 0; q.next = 5 + r() * 9; }
         if (Math.hypot(q.x - q.sx, q.y - q.sy) > 7) { streaks.push({ x0: q.sx, y0: q.sy, x1: q.x, y1: q.y + q.rad * 0.6, w: q.rad * 0.42, age: 0 }); q.sx = q.x; q.sy = q.y + q.rad * 0.6; }
@@ -653,8 +654,10 @@ function rainGobo(renderer, mobile, out, win) {
       if (q.y < -12) runs.splice(i, 1);
     }
     for (let i = streaks.length - 1; i >= 0; i--) { streaks[i].age += dt; if (streaks[i].age > 14) streaks.splice(i, 1); }
-    drops = drops.filter(d => !d.dead);
-    if (drops.length > MAXD) drops.splice(0, drops.length - MAXD); // the pane holds only so much: the oldest droplets dry off
+    drops = drops.filter(d => !d.dead && !(d.gone && d.a <= 0));
+    let live = 0; for (const d of drops) if (!d.gone) live++;
+    for (let i = 0; live > LIVE && i < drops.length; i++) if (!drops[i].gone) { drops[i].gone = 1.2; live--; } // the pane holds only so much: the oldest droplets dry off
+    if (drops.length > MAXD) drops.splice(0, drops.length - MAXD); // the buffer's hard limit, past anything the fades should reach
     while (streaks.length > MAX - MAXD - runs.length) streaks.shift();
   };
   // the rain has been falling for a while already
@@ -663,7 +666,7 @@ function rainGobo(renderer, mobile, out, win) {
   const write = () => {
     let n = 0; const D = aD.array, K = aK.array, u = 1 / P;
     for (const s of streaks) { const k = Math.exp(-s.age / 5); if (k < 0.03) continue; D.set([(s.x0 + s.x1) / 2 * u, (s.y0 + s.y1) / 2 * u, s.w * u, Math.max(0.5, Math.abs(s.y0 - s.y1) / 2 + 1) * u], n * 4); K.set([1, k, 0, 0], n * 4); n++; }
-    for (const d of drops) { D.set([d.x * u, d.y * u, d.rad * d.ax * u, d.rad / d.ax * u], n * 4); K.set([0, d.a, d.seed, 0], n * 4); n++; }
+    for (const d of drops) { const k = d.gone ? 0.5 + 0.5 * d.a : 1; D.set([d.x * u, d.y * u, d.rad * k * d.ax * u, d.rad * k / d.ax * u], n * 4); K.set([0, d.a, d.seed, 0], n * 4); n++; } // shrinking as it leaves
     for (const q of runs) { const st = q.moving ? 1.22 : 1.08; D.set([q.x * u, q.y * u, q.rad / Math.sqrt(st) * u, q.rad * st * u], n * 4); K.set([0, 1, q.seed, 0], n * 4); n++; }
     geo.instanceCount = n; aD.needsUpdate = aK.needsUpdate = true;
     const prev = renderer.getRenderTarget(), sm = renderer.shadowMap.needsUpdate;
