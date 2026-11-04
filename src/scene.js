@@ -538,7 +538,7 @@ function lights(scene, renderer, mobile, out) {
   const rain = rainGobo(renderer, mobile, out, win); win.map = rain.texture; win.intensity /= rain.glass; scene.add(win, win.target); out.rain = rain;
   ticks.push((t, dt) => rain.update(t, dt));
   // lightning, now and then: the window flashes, the room shows for an instant
-  // Its shadow covers the desk and the board, and is drawn only while a strike lasts. Dark, it costs nothing: see installDarkness.
+  // Its shadow covers the desk and the board. It is drawn once at start, so the map exists before the first strike, then only while a strike lasts. Dark, it costs nothing: see installDarkness.
   const flash = new THREE.DirectionalLight('#c9d6ff', 0); flash.position.copy(WINDOW); flash.castShadow = true; flash.shadow.autoUpdate = false; flash.shadow.needsUpdate = true;
   flash.shadow.mapSize.set(1024, 1024); flash.shadow.bias = -0.0005; flash.shadow.normalBias = 0.5; flash.shadow.radius = 1; // normalBias: it rakes the board at 7 degrees
   Object.assign(flash.shadow.camera, { left: -70, right: 70, top: 132, bottom: -122, near: 20, far: 480 }); flash.shadow.camera.updateProjectionMatrix(); scene.add(flash);
