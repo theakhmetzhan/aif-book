@@ -15,7 +15,7 @@ const N = SHEETS.length, NI = N - 2;
 const HINGE = 0; // boards hinge at the spine edge of the block and overhang it by a square elsewhere
 export const G0 = 0.07; // pages start this far from the hinge axis, so a turning page's corners never enter either stack
 const REST = 0.01; // a sheet within this angle of flat lies on its stack
-const STRIP = 0.2, CROWN = 0.3, LINING = 0.07, CLOTH = 0.012, VALLEY = 0.09; // the spine strip stands this far off the block, is rounded this much when shut, and is this thick
+const STRIP = 0.2, CROWN = 0.3, LINING = 0.07, CLOTH = 0.012, VALLEY = 0.09, EASE = 0.7; // the spine strip stands this far off the block, is rounded this much when shut, and is this thick
 const LEAVES = 0.5; // the paper-edge texture repeats every this many cm
 const RUN = 0.42; // the thicker stack's top page reaches the crease in this much run per unit of height: steep, as card curves into a gutter
 const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -71,7 +71,7 @@ export class Book {
           if (tx.metal) { m.metalness = 0.6; m.metalnessMap = tx.metal; m.bumpMap = tx.metal; m.bumpScale = -1; m.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', 'float roughnessFactor = mix(0.82, 0.32, texture2D(metalnessMap, vMetalnessMapUv).g);'); }; }
           return m;
         };
-        const paperFace = tx => new THREE.MeshStandardMaterial({ map: tx.map, roughness: 0.9 });
+        const paperFace = tx => new THREE.MeshStandardMaterial({ map: tx.map, roughness: 0.9, emissive: '#ffffff', emissiveMap: tx.map, emissiveIntensity: 0.05 }); // turned away from the lamp, a page still shows by the room's light
         const geo = new THREE.BoxGeometry(BW, BT, BH, 1, 1, 1);
         const uv = geo.attributes.uv; for (let k = 12; k < 16; k++) { uv.setX(k, 1 - uv.getX(k)); uv.setY(k, 1 - uv.getY(k)); } uv.needsUpdate = true;
         // +y face = front, -y face = back. Cover: front is cloth; back cover board: front is the endpaper, back is cloth.
@@ -139,7 +139,7 @@ export class Book {
     }
     // the back of the block: every leaf's root rises out of the spine and bends over to its page, so seen from the head or tail the whole
     // section between the strip and the leaves is paper, and from above it is the top page curving down into the crease
-    const seg = this.rootSeg = 12, fan = this.rootFan = 12, M = (N - 1) * seg, count = (M + 1) * (2 + 2 * (fan + 1)), rp = new Float32Array(count * 3), ruv = new Float32Array(count * 2), ri = [];
+    const seg = this.rootSeg = 12, fan = this.rootFan = 16, M = (N - 1) * seg, count = (M + 1) * (2 + 2 * (fan + 1)), rp = new Float32Array(count * 3), ruv = new Float32Array(count * 2), ri = [];
     const cap = this.rootCap = (o, j, c) => (M + 1) * 2 + (o * (M + 1) + j) * (fan + 1) + c; // a leaf's edge from the spine (c = 0) to the end of its sheet (c = fan), at head (o = 0) or tail
     for (let j = 0; j < M; j++) { const a = j * 2; ri.push(a, a + 2, a + 1, a + 2, a + 3, a + 1); }
     for (const o of [0, 1]) for (let j = 0; j < M; j++) for (let c = 0; c < fan; c++) { const a = cap(o, j, c), b = a + fan + 1; ri.push(a, b, a + 1, b, b + 1, a + 1); }
@@ -234,9 +234,9 @@ export class Book {
         const h = half * (G0 + (f.side === 'front' ? pc.x0 : PW - pc.x1)) - 0.02 - (pc.layer + pc.span) * (CARD + 0.0015);
         phiMax = Math.min(phiMax, Math.asin(Math.min(1, Math.max(0, h / pc.H))));
       }
-      // flat while a page of the spread is high in the air; they stand up as it comes down, and fold as soon as it lifts
+      // they rise with the opening of the spread, slowly at first as folded card does, and lie down the same way as it shuts
       const u = Math.min(1, Math.max(0, alpha / Math.PI));
-      const mech = Math.PI / 2 * sstep(0.72, 1, u);
+      const mech = Math.PI / 2 * u ** 2;
       let phi = Math.max(0, smin(mech, phiMax));
       if (u > 0.999) phi = Math.min(phi, Math.PI / 2 - 0.006 * (1 + Math.sin(time * 0.6 + f.phase))); // a faint draft
       for (const pc of f.pieces) setPieceFold(pc, phi);
@@ -285,18 +285,20 @@ export class Book {
     // with the spine beneath; each leaf is rooted on the strip where it lies when the book is shut
     const cap = this.rootCap, Q = this.back.geometry.attributes.position, UV = this.back.geometry.attributes.uv, tone = this.back.geometry.attributes.color, seg = this.rootSeg, fan = this.rootFan, M = (N - 1) * seg, z = PH / 2 + 0.002;
     const tip = s => { const [x, y] = at(s, G0 + 0.02, s.isBoard ? 0 : s.top + (s.bot - s.top) * s.e); return [x, y - 0.004]; }, root = s => s.i === 0 ? n : s.i === N - 1 ? 0 : nj + ns * s.yR / this.W;
-    const flat = sstep(0.5, 1, Math.min(S[0].e, 1 - S[N - 1].e)), parted = i => i >= 0 && i < N - 1 ? sstep(0, 0.2, Math.abs(S[i].e - S[i + 1].e)) : 0, kink = S.map((s, i) => Math.max(parted(i - 1), parted(i)));
-    const shut = s => (s.yR + (s.isBoard ? 0 : s.top + (s.bot - s.top) * s.e)) / LEAVES; // where a sheet's face comes in the block's lines
+    const flat = sstep(0.5, 1, Math.min(S[0].e, 1 - S[N - 1].e)), parted = i => sstep(0, 0.2, Math.abs(S[i].e - S[i + 1].e));
+    const shut = s => (s.yR + (s.isBoard ? 0 : s.top + (s.bot - s.top) * s.e) - 0.004 * Math.cos(s.theta)) / LEAVES; // where a sheet's face comes in the block's lines
     for (let i = 0; i < N - 1; i++) { const a = tip(S[i]), b = tip(S[i + 1]), ra = root(S[i]), rb = root(S[i + 1]), curve = parted(i); // straight down a stack's back, curved where a page leaves it
       for (let m = 0; m <= seg; m++) { const t = m / seg, j = i * seg + m, rise = Math.min(1, Math.abs(a[1] - b[1]) / 0.5), roll = 1 - Math.cos(Math.PI / 2 * t), fall = Math.sin(Math.PI / 2 * t), steep = a[1] > b[1], x = a[0] + (b[0] - a[0]) * (t + curve * rise * ((steep ? fall : roll) - t)), y = a[1] + (b[1] - a[1]) * (t + curve * ((steep ? roll : fall) - t)) - VALLEY * curve * flat * (1 - rise) * Math.sin(Math.PI * t) ** 4;
-        const r = ra + (rb - ra) * (t + curve * ((a[1] > b[1] ? t ** 3 : 1 - (1 - t) ** 3) - t)), r0 = Math.min(n - 1, Math.floor(r)), f = r - r0, ox = inner[r0][0] + (inner[r0 + 1][0] - inner[r0][0]) * f, oy = inner[r0][1] + (inner[r0 + 1][1] - inner[r0][1]) * f;
+        const r = ra + (rb - ra) * t, r0 = Math.min(n - 1, Math.floor(r)), f = r - r0, ox = inner[r0][0] + (inner[r0 + 1][0] - inner[r0][0]) * f, oy = inner[r0][1] + (inner[r0 + 1][1] - inner[r0][1]) * f;
         // on the steep side of the crease the roots run ahead of the page, so the leaves do not cross; paper darkens as it goes down into the crease, where the page beside it shades it
         const g = 1 - 0.85 * curve * (rise * (steep ? fall : 1 - roll) ** 1.2 + (1 - rise) * Math.sin(Math.PI * t) ** 0.6);
         for (const e of [0, 1]) tone.setXYZ(j * 2 + e, g, g, g);
         Q.setXYZ(j * 2, x, y, PH / 2); Q.setXYZ(j * 2 + 1, x, y, -PH / 2);
-        // a leaf leaves its stack level and stands up out of the spine, the bends nested inside each other; the leaves nearest the top page have no room to, and run straight
-        const free = 1 - kink[i] - (kink[i + 1] - kink[i]) * t, bend = free * (1 - flat * Math.min(1, Math.max(0, y / Math.max(1e-6, this.stackH[x < 0 ? 0 : 1]))) ** 4), bx = (x + ox) / 2 + (ox - x) / 2 * bend, by = (y + oy) / 2 + (y - oy) / 2 * free;
-        for (let c = 0; c <= fan; c++) { const v = c / fan, px = (1 - v) ** 2 * ox + 2 * v * (1 - v) * bx + v * v * x, py = (1 - v) ** 2 * oy + 2 * v * (1 - v) * by + v * v * y; Q.setXYZ(cap(0, j, c), px, py, z + j * 1e-4); Q.setXYZ(cap(1, j, c), px, py, -z - j * 1e-4); for (const o of [0, 1]) UV.setY(cap(o, j, c), shut(S[i]) + (shut(S[i + 1]) - shut(S[i])) * t); } } } // each leaf a hair proud of the last, so none shares a plane with its neighbour
+        // a leaf runs level along its stack, eases over and stands up out of the spine, each bend nested inside the one above; where a top page falls to the crease, the leaves beside it follow that fall
+        const lie = curve * rise * Math.cos(S[steep ? i : i + 1].theta) ** 12, ramp = Math.min(1, 1.5 * (steep ? 1 - t : t), 8 * (steep ? t : 1 - t)), free = (Math.cos(S[i].theta) ** 2 * (1 - t) + Math.cos(S[i + 1].theta) ** 2 * t) * (1 - curve * (lie * 0.2 * (steep ? t : 1 - t) * Math.min(1, 8 * (steep ? 1 - t : t)))), fp = Math.PI / 2 * Math.cos(Math.PI / 2 * t), rp = Math.PI / 2 * Math.sin(Math.PI / 2 * t), sx = (steep ? -1 : 1) * (b[0] - a[0]) * (1 + curve * rise * ((steep ? fp : rp) - 1)), sy = (steep ? -1 : 1) * (b[1] - a[1]) * (1 + curve * ((steep ? rp : fp) - 1)), sl = Math.hypot(sx, sy) || 1, mix = lie * ramp,
+          hx = Math.cos(S[i].theta) * (1 - t) + Math.cos(S[i + 1].theta) * t, hy = Math.sin(S[i].theta) * (1 - t) + Math.sin(S[i + 1].theta) * t, dx = hx + (sx / sl - hx) * mix, dy = hy + (sy / sl - hy) * mix, far = Math.hypot(x - ox, y - oy),
+          run = EASE * (1 - curve) * (1 - Math.min(1, Math.max(0, y / Math.max(1e-6, this.stackH[S[i].e > 0.5 ? 0 : 1]))) ** 4) * far, ex = x + dx * run, ey = y + dy * run, back = Math.abs(dx) > 0.05 ? Math.min(0.8 * far + run, Math.max(0, (ex - ox) / dx)) : 0, bx = (ex + ox) / 2 * (1 - free) + (ex - dx * back) * free, by = (ey + oy) / 2 * (1 - free) + (ey - dy * back) * free;
+        for (let c = 0; c <= fan; c++) { const v = c / fan, px = (1 - v) ** 2 * ox + 2 * v * (1 - v) * bx + v * v * ex, py = (1 - v) ** 2 * oy + 2 * v * (1 - v) * by + v * v * ey; Q.setXYZ(cap(0, j, c), px, py, z + j * 1e-4); Q.setXYZ(cap(1, j, c), px, py, -z - j * 1e-4); for (const o of [0, 1]) UV.setY(cap(o, j, c), shut(S[i]) + (shut(S[i + 1]) - shut(S[i])) * t); } } } // each leaf a hair proud of the last, so none shares a plane with its neighbour
     Q.needsUpdate = UV.needsUpdate = tone.needsUpdate = true; this.back.geometry.computeBoundingSphere();
   }
 }
