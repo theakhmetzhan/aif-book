@@ -18,6 +18,9 @@ const STRIP = 0.2, CROWN = 0.3, LINING = 0.07; // the spine strip stands this fa
 const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const turnEase = t => t - Math.sin(2 * Math.PI * t) / (2 * Math.PI); // eases in and out of each turn
 const smin = (a, b, k = 0.07) => -k * Math.log(Math.exp(-a / k) + Math.exp(-b / k));
+// the strip's round and chord when its ends stand dy apart, of w when shut: pressed flat by the desk mid-book, its round comes back as it
+// stands up, and it keeps its length, so what the round gives back widens it
+const stripShape = (dy, w) => { const crown = CROWN * (dy / w) ** 2, c0 = w - 0.04, arc = c0 + 8 * CROWN * CROWN / (3 * c0); return [crown, (arc + Math.sqrt(arc * arc - 32 * crown * crown / 3)) / 2]; };
 
 export function faceTexture(name, renderer, extra, mobile) {
   const f = FACES[name]; const board = f.kind === 'board';
@@ -188,7 +191,7 @@ export class Book {
     const gy = (L + R + Math.hypot(L - R, 0.15)) / 2; let d = 0, sL = 0, sR = 0, cL = 1, cR = 1, bl = 0, br = 0;
     for (let i = 0; i < 4; i++) { // the boards part by what the strip's lean frees, the lighter side sliding most
       bl = d * R / (L + R); br = d * L / (L + R); sL = (gy - L) / (BW + bl); sR = (gy - R) / (BW + br); cL = Math.sqrt(1 - sL * sL); cR = Math.sqrt(1 - sR * sR);
-      const dy = (R * cR + br * sR) - (L * cL + bl * sL); d = Math.sqrt(Math.max(0, this.W ** 2 - dy * dy));
+      const dy = (R * cR + br * sR) - (L * cL + bl * sL), w = stripShape(dy, this.W)[1] + 0.04; d = Math.sqrt(Math.max(0, w * w - dy * dy));
     }
     const tL = Math.asin(sL), tR = Math.asin(sR), span = Math.PI + tL + tR;
     // a sheet's slot on a stack: its height above that board, sheared toward the gutter so the stack's back runs from the board's hinge to the gutter
@@ -245,10 +248,9 @@ export class Book {
     const at = (s, lx, ly) => { const c = Math.cos(s.theta), sn = Math.sin(s.theta), q = s.pivot.position; return [q.x + lx * c - ly * sn, q.y + lx * sn + ly * c]; };
     const n = this.spineSeg, nj = 5, ns = n - 2 * nj, F = at(cov, 0, 0), B = at(bk, 0, 0), Cf = at(cov, 0, cov.top), Cb = at(bk, 0, bk.bot);
     const len = Math.hypot(F[0] - B[0], F[1] - B[1]), tx = (F[0] - B[0]) / len, ty = (F[1] - B[1]) / len, mx = -ty, my = tx; // along the strip, back to front, and outward
-    const crown = CROWN * ((F[1] - B[1]) / this.W) ** 2; // pressed flat by the desk mid-book, its round comes back as it stands up
-    // it keeps its length: what the round gives back widens it, and the joints take that up
-    const c0 = this.W - 0.04, arc = c0 + 8 * CROWN * CROWN / (3 * c0), chord = (arc + Math.sqrt(arc * arc - 32 * crown * crown / 3)) / 2;
-    const end = dir => [(F[0] + B[0] - tx * dir * chord) / 2 + mx * STRIP, (F[1] + B[1] - ty * dir * chord) / 2 + my * STRIP], Sb = end(1), Sf = end(-1);
+    const [crown, chord] = stripShape(F[1] - B[1], this.W), off = STRIP * crown / CROWN; // it hangs between the boards' outer corners: well off them when it stands, level with them flat on the desk
+    const under = -BT - ((Cf[1] + Cb[1] - Math.abs(ty) * chord) / 2 + my * off), slide = under > 0 ? under / ty : 0; // its lower end rests on the desk, so it rides up along itself
+    const end = dir => [(Cf[0] + Cb[0] - tx * dir * chord) / 2 + mx * off + tx * slide, (Cf[1] + Cb[1] - ty * dir * chord) / 2 + my * off + ty * slide], Sb = end(1), Sf = end(-1);
     // a joint: cloth leaving the board along its face and arriving along the strip, so it rolls open and creases as the board swings
     const joint = (C, s, Sx, dir, t) => {
       const k = 0.25 * Math.hypot(Sx[0] - C[0], Sx[1] - C[1]), c = Math.cos(s.theta), sn = Math.sin(s.theta), a = (1 - t) ** 3, b = 3 * (1 - t) ** 2 * t, e = 3 * (1 - t) * t * t, f = t ** 3;
@@ -261,7 +263,7 @@ export class Book {
       else { const w = (i - nj) / ns, h = 4 * w * (1 - w) * crown; line.push([Sb[0] + (Sf[0] - Sb[0]) * w + mx * h, Sb[1] + (Sf[1] - Sb[1]) * w + my * h]); }
     }
     const P = this.spine.geometry.attributes.position, ring = 2 * (n + 1), set = (i, x, y) => { y = Math.max(y, -BT); P.setXYZ(i * 2, x, y, BH / 2); P.setXYZ(i * 2 + 1, x, y, -BH / 2); }; // the desk stops it
-    for (let i = 0; i <= n; i++) { const [x, y] = line[i], k = LINING * Math.min(1, i / nj, (n - i) / nj); set(i, x, y); set(ring - 1 - i, x - mx * k, y - my * k); } // the lining thins out to nothing at the board's edge
+    for (let i = 0; i <= n; i++) { const [x, y] = line[i], k = LINING * Math.max(0, Math.min(1, (i - nj) / 2, (n - nj - i) / 2)); set(i, x, y); set(ring - 1 - i, x - mx * k, y - my * k); } // only the strip is lined, thinning to its ends: a joint is bare cloth
     P.needsUpdate = true; this.spine.geometry.computeVertexNormals(); this.spine.geometry.computeBoundingSphere();
     const Q = this.back.geometry.attributes.position, m = this.backSeg + 1;
     S.forEach((s, i) => { const q = s.pivot.position; Q.setXYZ(i, q.x, q.y, PH / 2); Q.setXYZ(i + m, q.x, q.y, -PH / 2); });
