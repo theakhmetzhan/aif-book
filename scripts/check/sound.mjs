@@ -1,6 +1,6 @@
 // Flies the real camera rig through the moves that upset the sound and renders the real Ambience with an OfflineAudioContext, stepped at 60 fps, so every run is the same.
 // Rain and thunder are rendered twice from one seed, camera still and camera flying: anything that differs is the camera's doing. The clock and the book carry a steady tone,
-// read every 128 samples, so a jump of one audio block shows. The book's sound is rendered for each sheet alone, and for a fast run of them.
+// read every 128 samples, so a jump of one audio block shows. The book's sound is rendered for a whole sitting, turn by turn, and for a fast run of pages.
 // usage: URL=http://localhost:5185/aif-book/ node scripts/check/sound.mjs [traces.json]
 import puppeteer from 'puppeteer-core';
 import fs from 'fs';
@@ -21,8 +21,9 @@ const r = await pg.evaluate(async base => {
     [10, 10.6, g => { g.at = pos.book; g.zoom(0.8, 0, 0); }],
     [12, 12.02, g => g.set(HOME.target, HOME, true)],
   ];
+  const started = [], start = AudioBufferSourceNode.prototype.start; AudioBufferSourceNode.prototype.start = function (...a) { started.push(this); return start.apply(this, a); };
   const render = async ({ T = 15, seed = 7, solo = [], tone = null, fly = false, at = {}, chain = false, step = null }) => {
-    const ctx = new OfflineAudioContext(2, T * SR, SR), cam = new T3.PerspectiveCamera(38, 16 / 9, 2, 900), dom = document.createElement('div');
+    started.length = 0; const ctx = new OfflineAudioContext(2, T * SR, SR), cam = new T3.PerspectiveCamera(38, 16 / 9, 2, 900), dom = document.createElement('div');
     const rig = new CameraRig(cam, dom, { pick: () => rig.at || null, limits: { rMax: 500 } }); rig.set(HOME.target, HOME, true); rig.home = HOME.target.clone(); cam.updateMatrixWorld(true);
     const A = new Ambience({ camera: cam, positions: pos, context: ctx, seed, now: () => 1.7e12 + ctx.currentTime * 1000, baseUrl: base + 'audio/' });
     A.unlock(); await A.ready; A._solo(solo);
@@ -34,7 +35,7 @@ const r = await pg.evaluate(async base => {
       if (fly) for (const [a, z, f] of FLIGHT) if (t >= a && t < z) f(rig, t);
       rig.update(dt); for (const k in at) if (Math.abs(t - k) < dt / 2) at[k](A);
       A.update(dt); cam.updateMatrixWorld(); ctx.resume(); });
-    const o = await ctx.startRendering(), out = [o.getChannelData(0), o.getChannelData(1)]; out.recording = A._buf.page?.getChannelData(0); return out;
+    const o = await ctx.startRendering(), out = [o.getChannelData(0), o.getChannelData(1)]; out.recording = A._buf.page?.getChannelData(0); out.turns = started.filter(s => s.buffer === A._buf.page); return out;
   };
   const dB = v => 20 * Math.log10(v + 1e-9), rms = (x, a, n) => { let s = 0; for (let i = a; i < a + n; i++) s += x[i] * x[i]; return Math.sqrt(s / n); };
   const trace = ([l, q], n, from = 3.2) => { const o = []; for (let i = Math.round(from * SR / n) * n; i + n <= l.length; i += n) { const a = rms(l, i, n), c = rms(q, i, n); o.push([i / SR, dB(Math.hypot(a, c)), dB(c) - dB(a)]); } return o; };
@@ -52,16 +53,19 @@ const r = await pg.evaluate(async base => {
     return { range: Math.max(...lv) - Math.min(...lv), side: Math.max(...sd) - Math.min(...sd), jump, speed, sideSpeed }; };
   for (const name of ['clock', 'book']) { const tr = trace(await render({ tone: name, fly: true }), 128); out[name] = { ...read(tr), trace: tr.filter((_, i) => i % 8 === 0) }; }
   out.control = read(trace(await render({ T: 6, tone: 'clock', step: 1536 * 128 / SR }), 128)); // a known 6 dB step: the reading must see it
-  // the book's sound: every sheet on its own, covers included, the same as each other and as the recording, played straight; nothing on landing; a fast run no louder
-  const turn = async (lifts, land) => { const at = {}; for (const [t, sheet] of lifts) at[t] = A => A.sheet({ type: 'lift', sheet, board: sheet === 0 || sheet === 7 }); if (land) at[land[0]] = A => A.sheet({ type: 'land', sheet: land[1], board: land[1] === 0 || land[1] === 7 }); return render({ T: 6.5, solo: ['page'], at }); };
+  // the book's sound: one sitting, forward through the book and back, every turn played out alone, covers included, so it also shows a turn that depends on the ones before it.
+  // Each must match the others and the recording, played straight, with nothing on landing; and a fast run must be no louder
+  const turn = async (T, lifts, lands = []) => { const at = {}, ev = (type, t, sheet) => at[t] = A => A.sheet({ type, sheet, board: sheet === 0 || sheet === 7 }); for (const [t, s] of lifts) ev('lift', t, s); for (const [t, s] of lands) ev('land', t, s); return render({ T, solo: ['page'], at }); };
   const first = (x, v = 1e-4) => { for (let i = 0; i < x.length; i++) if (Math.abs(x[i]) > v) return i; return -1; }, f60 = n => Math.round(n * 60) / 60, len = Math.round(0.6 * SR);
   // what is left of a take once the recording, at its best fit in level and time, is taken out: a change of speed or tone leaves most of it
   const unlike = (x, x0, rec) => { if (!rec) return 0; const r0 = first(rec, 1e-3); let worst = 1; for (let lag = -24; lag <= 24; lag += 0.25) { const w = Math.floor(lag), h = lag - w; let xy = 0, yy = 0, xx = 0; for (let i = 0; i < len; i++) { const a = x[x0 + i], j = r0 + w + i, c = (rec[j] ?? 0) * (1 - h) + (rec[j + 1] ?? 0) * h; xy += a * c; yy += c * c; xx += a * a; } worst = Math.min(worst, 1 - xy * xy / (xx * yy || 1)); } return 10 * Math.log10(worst + 1e-12); }; // a quarter of a sample at a time: a sound can start between samples
-  const takes = []; for (let k = 0; k < 8; k++) { const t = f60(3.5 + k * 0.1), land = f60(t + 1.1), o = await turn([[t, k]], [land, k]), [x] = o, x0 = first(x); takes.push({ k, x, x0, delay: x0 / SR - t, peak: dB(peak(x)), landing: dB(peak(x, Math.round(land * SR), Math.round((land + 0.25) * SR)) / peak(x)), recording: unlike(x, x0, o.recording) }); }
-  const ref = takes[3], [run] = await turn(Array.from({ length: 8 }, (_, i) => [f60(3.5 + i * 0.2), i]));
+  const order = [0, 1, 2, 3, 4, 5, 6, 7, 7, 6, 5, 4, 3, 2, 1, 0], lifts = order.map((s, k) => [f60(3.5 + k * 2.1), s]), lands = lifts.map(([t, s]) => [f60(t + 1.1), s]); // 2.1 s apart: the reverb of one has gone before the next
+  const sitting = await turn(39, lifts, lands), [x] = sitting, whole = peak(x), at = t => Math.round(t * SR);
+  const takes = lifts.map(([t], k) => { const a = at(t), x0 = a + first(x.subarray(a)), land = at(lands[k][0]); return { x, x0, delay: x0 / SR - t, peak: dB(peak(x, a, land)), landing: dB(peak(x, land, land + at(0.25)) / whole), recording: unlike(x, x0, sitting.recording) }; });
+  const ref = takes[3], fast = await turn(6.5, Array.from({ length: 8 }, (_, i) => [f60(3.5 + i * 0.2), i])), [run] = fast; // cut short by the next, so read at the source
   for (const t of takes) { let d = 0; for (let i = 0; i < Math.round(0.72 * SR); i++) d = Math.max(d, Math.abs(t.x[t.x0 + i] - ref.x[ref.x0 + i])); t.same = dB(d / peak(ref.x)); }
   const most = k => Math.max(...takes.map(t => t[k]));
-  out.turn = { same: most('same'), recording: most('recording'), delay: most('delay'), peak: most('peak'), landing: most('landing'), run: dB(peak(run)) - dB(peak(ref.x)) };
+  out.turn = { same: most('same'), recording: most('recording'), delay: most('delay'), peak: most('peak'), landing: most('landing'), run: dB(peak(run)) - dB(peak(ref.x)), fast: fast.turns.length, bent: fast.turns.filter(s => s.playbackRate.value !== 1 || s.detune.value !== 0).length };
   return out;
 }, base);
 if (process.argv[2]) fs.writeFileSync(process.argv[2], JSON.stringify(r));
@@ -70,7 +74,7 @@ console.log(`rain     flying against still: ${f(rain.level)} dB level, ${f(rain.
 console.log(`thunder  flying against still: ${f(thunder.level)} dB level, ${f(thunder.side)} dB side, over ${thunder.heard} windows`);
 for (const [n, c] of [['clock', clock], ['book', book]]) console.log(`${n.padEnd(8)} moves ${f(c.range)} dB and ${f(c.side)} dB side; at most ${f(c.speed)} dB/s, ${f(c.sideSpeed)} dB side/s; biggest jump between blocks ${f(c.jump)} dB`);
 console.log(`control  a 6 dB step reads as a ${f(control.jump)} dB jump`);
-console.log(`turn     all 8 sheets: furthest from each other ${f(turn.same)} dB, from the recording ${f(turn.recording)} dB; starts ${(turn.delay * 1000).toFixed(0)} ms after the lift; peak ${f(turn.peak)} dBFS; ${f(turn.landing)} dB on landing; a run of 8 peaks ${f(turn.run)} dB over one`);
+console.log(`turn     16 turns in a sitting: furthest from each other ${f(turn.same)} dB, from the recording ${f(turn.recording)} dB; starts ${(turn.delay * 1000).toFixed(0)} ms after the lift; peak ${f(turn.peak)} dBFS; ${f(turn.landing)} dB on landing; a run of ${turn.fast} peaks ${f(turn.run)} dB over one, ${turn.bent} not played straight`);
 const fails = [], need = (c, m) => { if (!c) fails.push(m); };
 need(rain.heard > 100 && thunder.heard > 100, 'nothing to measure');
 need(rain.level < 0.05 && rain.side < 0.05, 'the camera moves the rain'); need(thunder.level < 0.05 && thunder.side < 0.05, 'the camera moves the thunder');
@@ -79,5 +83,5 @@ for (const [n, c, range] of [['clock', clock, 9.5], ['book', book, 6.5]]) {
   need(c.range > 2 && c.side > 2, `${n}: has lost its sense of place`);
 }
 need(control.jump > 5.5, 'the reading cannot see a jump');
-need(turn.same < -60, 'the sheets do not all make the same sound'); need(turn.recording < -15, 'a turn is not the recording, played straight'); need(turn.delay < 0.04, 'the sound starts late'); need(turn.landing < -20, 'a landing makes a sound of its own'); need(turn.peak < -28, 'the turn is loud'); need(turn.run < 1, 'a run of pages builds up');
+need(turn.same < -60, 'the turns do not all make the same sound'); need(turn.recording < -15, 'a turn is not the recording, played straight'); need(turn.delay < 0.04, 'the sound starts late'); need(turn.landing < -20, 'a landing makes a sound of its own'); need(turn.peak < -28, 'the turn is loud'); need(turn.run < 1, 'a run of pages builds up'); need(turn.fast === 8 && !turn.bent, 'a fast run is not the recording, played straight');
 console.log('errors', errs); console.log(fails.length ? 'FAIL: ' + fails.join('; ') : 'PASS'); await b.close(); process.exit(fails.length || errs.length ? 1 : 0);
