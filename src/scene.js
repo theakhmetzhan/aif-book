@@ -30,6 +30,9 @@ export function installDarkness() {
   // The lightning is the only directional light, and dark but for a moment: while it is, skip its shadow lookups and its shading.
   const lf = THREE.ShaderChunk.lights_fragment_begin, at = lf.indexOf('getDirectionalLightInfo');
   THREE.ShaderChunk.lights_fragment_begin = lf.slice(0, at) + lf.slice(at).replace(';', '; if ( directLight.color != vec3( 0.0 ) ) {').replace(/RE_Direct\(.*\);/, '$& }');
+  // The map's lamp stand-in is there to be reflected: the real lamp does the lighting. It stands in front of the props, so its fill
+  // would wash over every face turned to the viewer (the board, the clock's dial). The diffuse fill reads the map mirrored front to back.
+  THREE.ShaderChunk.envmap_physical_pars_fragment = THREE.ShaderChunk.envmap_physical_pars_fragment.replace('envMapRotation * worldNormal, ENVMAP_MAX_LOD', 'envMapRotation * ( worldNormal * vec3( 1.0, 1.0, - 1.0 ) ), ENVMAP_MAX_LOD');
   THREE.ShaderChunk.fog_pars_vertex = '#ifdef USE_FOG\n varying vec3 vFogWorld;\n#endif';
   THREE.ShaderChunk.fog_vertex = '#ifdef USE_FOG\n vec4 fogW = vec4( transformed, 1.0 );\n #ifdef USE_INSTANCING\n fogW = instanceMatrix * fogW;\n #endif\n vFogWorld = ( modelMatrix * fogW ).xyz;\n#endif';
   THREE.ShaderChunk.fog_pars_fragment = `#ifdef USE_FOG
@@ -548,11 +551,19 @@ function lights(scene, renderer, mobile, out) {
     win.intensity = baseWin * (1 + f * 7); win.color.setRGB(0.56 + f * 0.3, 0.65 + f * 0.25, 0.84 + f * 0.1); flash.intensity = f * 0.9;
   });
   out.lampObj?.userData.setGlow?.(1);
-  // the room's reflections put the lamp off to the left, right for everything else on the desk; the lamp's own brass sees it
-  // overhead. Satin and darkened: the real source is the shade's whole mouth, its light spread thin; this single point packs
-  // all of it into one spot, so full-strength brass would mirror it as a white bloom instead of a soft streak of bulb colour.
-  if (out.lampObj) { const up = out.bulb.clone().sub(out.lampObj.position).normalize().multiplyScalar(2.9), env = roomEnvironment(renderer, up.toArray());
-    out.lampObj.traverse(m => { if (m.isMesh && m.material.metalness === 1) { m.material = m.material.clone(); m.material.color.multiplyScalar(0.18); Object.assign(m.material, { envMap: env, envMapIntensity: 1.2, roughnessMap: null, roughness: 0.34, clearcoat: 0 }); } }); }
+  // main.js builds the first map before the bulb exists, so it holds no lamp: right for the outside of the shade, which faces away
+  // from its bulb, and it is what desk() holds. Everything else sees the stand-in where the bulb really is from the middle of the
+  // props. The lamp's own brass sees it overhead and sees the wider pool it stands in. Satin, full colour so its reflections match
+  // the clock's, but it takes little of the direct light: the real source is the shade's whole mouth, its light spread thin, and
+  // this single point packs all of it into one spot, so brass would mirror it as a white bloom, not a soft streak of bulb colour.
+  if (out.lampObj) { const clean = scene.environment, others = Object.values(out.props ?? {}).filter(o => o !== out.lampObj), mid = new THREE.Vector3();
+    others.forEach(o => mid.add(o.position)); mid.divideScalar(others.length || 1);
+    const standIn = b => out.bulb.clone().sub(b).normalize().multiplyScalar(2.9).toArray();
+    scene.environment = roomEnvironment(renderer, standIn(mid));
+    const env = roomEnvironment(renderer, standIn(out.lampObj.position), 3);
+    out.lampObj.traverse(m => { if (m.name === 'shadeOuter') m.material.envMap = clean;
+      if (m.isMesh && m.material.metalness === 1) { m.material = m.material.clone(); Object.assign(m.material, { envMap: env, envMapIntensity: 0.7, roughnessMap: null, roughness: 0.34, clearcoat: 0 });
+        m.material.onBeforeCompile = s => { s.fragmentShader = s.fragmentShader.replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n reflectedLight.directSpecular *= 0.05;'); }; } }); }
   out.lamp = lamp; out.win = win;
 }
 
@@ -670,11 +681,12 @@ function rainGobo(renderer, mobile, out, win) {
 }
 
 // a dim environment matching the room: the lamp's warm pool, the window's cool slats, black elsewhere (for reflections on brass, glass, varnish)
-export function roomEnvironment(renderer, lampAt = [-2.2, 1.3, -1.4]) {
+// lampAt places the lamp's stand-in; without it the map holds no lamp
+export function roomEnvironment(renderer, lampAt, poolScale = 1) {
   const env = new THREE.Scene(); env.background = new THREE.Color('#020202');
   const box = new THREE.Mesh(new THREE.BoxGeometry(10, 6, 10), new THREE.MeshBasicMaterial({ color: '#050403', side: THREE.BackSide })); env.add(box);
-  const warm = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffb36a').multiplyScalar(14) })); warm.position.set(...lampAt); env.add(warm);
-  const pool = new THREE.Mesh(new THREE.PlaneGeometry(4, 3), new THREE.MeshBasicMaterial({ color: new THREE.Color('#5a3a1c').multiplyScalar(1.2) })); pool.rotation.x = -Math.PI / 2; pool.position.set(0, -2.9, 0); env.add(pool);
+  if (lampAt) { const warm = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffb36a').multiplyScalar(14) })); warm.position.set(...lampAt); env.add(warm); }
+  const pool = new THREE.Mesh(new THREE.PlaneGeometry(4, 3), new THREE.MeshBasicMaterial({ color: new THREE.Color('#5a3a1c').multiplyScalar(1.2) })); pool.rotation.x = -Math.PI / 2; pool.position.set(0, -2.9, 0); pool.scale.setScalar(poolScale); env.add(pool);
   for (let i = 0; i < 6; i++) { const s = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 1.8 - 0.0), new THREE.MeshBasicMaterial({ color: new THREE.Color('#8fa6d6').multiplyScalar(2.2) })); s.position.set(4.95, 0.4 + i * 0.32 - 0.8, 1); s.rotation.y = -Math.PI / 2; s.scale.set(1, 1, 1); s.rotation.z = Math.PI / 2; env.add(s); }
   const pm = new THREE.PMREMGenerator(renderer); const tex = pm.fromScene(env, 0.02).texture; pm.dispose(); return tex;
 }
