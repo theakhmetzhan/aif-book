@@ -137,10 +137,13 @@ export class Book {
     }
     // the back of the block: every leaf's root rises out of the spine and bends over to its page, so seen from the head or tail the whole
     // section between the strip and the leaves is paper, and from above it is the top page curving down into the crease
-    const seg = this.rootSeg = 6, M = (N - 1) * seg, rp = new Float32Array((M + 1) * 6 * 3), ruv = new Float32Array((M + 1) * 6 * 2), ri = [];
-    for (const o of [0, 1, 2]) for (let j = 0; j < M; j++) { const a = (o * (M + 1) + j) * 2; ri.push(a, a + 2, a + 1, a + 2, a + 3, a + 1); }
-    for (let j = 0; j <= M; j++) for (const o of [1, 2]) for (const e of [0, 1]) { const v = ((o * (M + 1) + j) * 2 + e) * 2; ruv[v] = e; ruv[v + 1] = j / M * this.W / LEAVES; }
-    const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.BufferAttribute(rp, 3)); rg.setAttribute('uv', new THREE.BufferAttribute(ruv, 2)); rg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(rp.length).fill(1), 3)); rg.setIndex(ri); rg.addGroup(0, 6 * M, 0); rg.addGroup(6 * M, 12 * M, 1);
+    const seg = this.rootSeg = 6, fan = this.rootFan = 8, M = (N - 1) * seg, count = (M + 1) * (2 + 2 * (fan + 1)), rp = new Float32Array(count * 3), ruv = new Float32Array(count * 2), ri = [];
+    const cap = this.rootCap = (o, j, c) => (M + 1) * 2 + (o * (M + 1) + j) * (fan + 1) + c; // a leaf's edge from the spine (c = 0) to the end of its sheet (c = fan), at head (o = 0) or tail
+    for (let j = 0; j < M; j++) { const a = j * 2; ri.push(a, a + 2, a + 1, a + 2, a + 3, a + 1); }
+    for (const o of [0, 1]) for (let j = 0; j < M; j++) for (let c = 0; c < fan; c++) { const a = cap(o, j, c), b = a + fan + 1; ri.push(a, b, a + 1, b, b + 1, a + 1); }
+    for (const o of [0, 1]) for (let j = 0; j <= M; j++) for (let c = 0; c <= fan; c++) { const v = cap(o, j, c) * 2; ruv[v] = c / fan; ruv[v + 1] = j / M * this.W / LEAVES; }
+    const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.BufferAttribute(rp, 3)); rg.setAttribute('uv', new THREE.BufferAttribute(ruv, 2)); rg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(rp.length).fill(1), 3)); rg.setIndex(ri); rg.setAttribute('normal', new THREE.BufferAttribute(rp.map((_, i) => i % 3 === (i < (M + 1) * 6 ? 1 : 2) ? 1 : 0), 3)); rg.addGroup(0, 6 * M, 0); // the crease takes the page's light, not the window's
+     rg.addGroup(6 * M, 12 * M * fan, 1);
     this.back = new THREE.Mesh(rg, [new THREE.MeshStandardMaterial({ color: T.paper, vertexColors: true, roughness: 0.9, side: THREE.DoubleSide, envMapIntensity: 0.15 }), edgeMat]);
     this.back.castShadow = this.back.receiveShadow = true; this.back.frustumCulled = false; this.group.add(this.back);
     this.events = {}; // events.sheet({ type: 'lift' | 'land', sheet, board }) as a sheet leaves or reaches a stack
@@ -194,7 +197,7 @@ export class Book {
     for (const s of this.sheets) { s.t = Math.min(1, Math.max(0, p - s.i)); s.e = turnEase(s.t); L += s.e * s.addL; R += (1 - s.e) * s.addR; }
     // the case lies flat on the desk while it is open: the strip flat between the boards, each stack on its board. Only when a board stands past
     // upright does the strip stand with it, against the block; the block's leaves shear to follow, as they do in the hand
-    const S = this.sheets, D = this.D, u = L / (L + R), X = D / 2, low = sstep(0.5, 1, Math.min(S[0].e, 1 - S[N - 1].e)), c = Math.cos(Math.PI / 2 * low), sn = Math.sin(Math.PI / 2 * low);
+    this.stackH = [L, R]; const S = this.sheets, D = this.D, u = L / (L + R), X = D / 2, low = sstep(0.5, 1, Math.min(S[0].e, 1 - S[N - 1].e)), c = Math.cos(Math.PI / 2 * low), sn = Math.sin(Math.PI / 2 * low);
     let w = D; for (let i = 0; i < 5; i++) w = stripShape(w * c, this.W)[1] + 0.04;
     const front = p < N / 2, Fx = front ? D * (1 - u) - w * sn : -D * u, Fy = front ? w * c : 0, Bx = front ? D * (1 - u) : -D * u + w * sn, By = front ? 0 : w * c;
     this.cx = p < 1 ? X + (BW / 2 - HINGE + X) * (1 - sstep(0, 1, p)) : p > N - 1 ? -X - (BW / 2 - HINGE + X) * sstep(N - 1, N, p) : X - D * u;
@@ -274,11 +277,11 @@ export class Book {
       else { const w = (i - nj) / ns, h = 4 * w * (1 - w) * crown; line.push([Sb[0] + (Sf[0] - Sb[0]) * w + mx * h, Sb[1] + (Sf[1] - Sb[1]) * w + my * h]); }
     }
     const P = this.spine.geometry.attributes.position, ring = 2 * (n + 1), set = (i, x, y) => { y = Math.max(y, -BT); P.setXYZ(i * 2, x, y, BH / 2); P.setXYZ(i * 2 + 1, x, y, -BH / 2); }; // the desk stops it
-    const inner = []; for (let i = 0; i <= n; i++) { const [x, y] = line[i], k = LINING * Math.max(0, Math.min(1, (i - nj) / 2, (n - nj - i) / 2)); set(i, x, y); set(ring - 1 - i, x - mx * k, y - my * k); inner.push([x - mx * k, Math.max(y - my * k, -BT)]); } // only the strip is lined, thinning to its ends: a joint is bare cloth
+    const inner = []; for (let i = 0; i <= n; i++) { const [x, y] = line[i], k = LINING * sstep(0, 1, Math.min((i - nj) / 4, (n - nj - i) / 4)); set(i, x, y); set(ring - 1 - i, x - mx * k, y - my * k); inner.push([x - mx * k, Math.max(y - my * k, -BT)]); } // only the strip is lined, thinning to its ends: a joint is bare cloth
     P.needsUpdate = true; this.spine.geometry.computeVertexNormals(); this.spine.geometry.computeBoundingSphere();
     // the roots: from each sheet's spine end, just inside it and just under its face so paper meets paper, along a smooth curve to the next sheet's,
     // with the spine beneath; each leaf is rooted on the strip where it lies when the book is shut
-    const Q = this.back.geometry.attributes.position, tone = this.back.geometry.attributes.color, seg = this.rootSeg, M = (N - 1) * seg, z = PH / 2 + 0.002, put = (o, j, e, x, y, zz) => Q.setXYZ((o * (M + 1) + j) * 2 + e, x, y, zz);
+    const cap = this.rootCap, Q = this.back.geometry.attributes.position, tone = this.back.geometry.attributes.color, seg = this.rootSeg, fan = this.rootFan, M = (N - 1) * seg, z = PH / 2 + 0.002;
     const tip = s => { const [x, y] = at(s, G0 + 0.02, s.isBoard ? 0 : s.top + (s.bot - s.top) * s.e); return [x, y - 0.004]; }, root = s => s.i === 0 ? n : s.i === N - 1 ? 0 : nj + ns * s.yR / this.W;
     for (let i = 0; i < N - 1; i++) { const a = tip(S[i]), b = tip(S[i + 1]), ra = root(S[i]), rb = root(S[i + 1]), curve = sstep(0, 0.2, Math.abs(S[i].e - S[i + 1].e)); // straight down a stack's back, curved where a page leaves it
       for (let m = 0; m <= seg; m++) { const t = m / seg, j = i * seg + m, x = a[0] + (b[0] - a[0]) * (t + curve * (3 * (1 - t) ** 2 * t * 0.45 + 3 * (1 - t) * t * t * 0.55 + t ** 3 - t)), y = a[1] + (b[1] - a[1]) * (t + curve * (t * t * (3 - 2 * t) - t));
@@ -286,9 +289,11 @@ export class Book {
         // paper darkens as it goes down into the crease, where the page beside it shades it
         const k = Math.min(1, Math.abs(a[1] - b[1]) / 0.5), low = a[1] > b[1] ? t * t : (1 - t) ** 2, g = 1 - 0.75 * curve * (k * low + (1 - k) * Math.sin(Math.PI * t));
         for (const e of [0, 1]) tone.setXYZ(j * 2 + e, g, g, g);
-        put(0, j, 0, x, y, z); put(0, j, 1, x, y, -z); put(1, j, 0, ox, oy, z); put(1, j, 1, x, y, z); put(2, j, 0, ox, oy, -z); put(2, j, 1, x, y, -z); } }
-    Q.needsUpdate = tone.needsUpdate = true; this.back.geometry.computeVertexNormals(); this.back.geometry.computeBoundingSphere();
-    const lit = this.back.geometry.attributes.normal; for (let v = 0; v < (M + 1) * 2; v++) lit.setXYZ(v, 0, 1, 0); // a page curving into the crease takes the page's light, not the window's
+        Q.setXYZ(j * 2, x, y, PH / 2); Q.setXYZ(j * 2 + 1, x, y, -PH / 2);
+        // a leaf leaves its stack level and stands up out of the spine, the bends nested inside each other; the leaves nearest the top page have no room to, and run straight
+        const bend = (1 - curve) * (1 - Math.min(1, Math.max(0, y / Math.max(1e-6, this.stackH[x < 0 ? 0 : 1]))) ** 2) ** 2, bx = (x + ox) / 2 + (ox - x) / 2 * bend, by = (y + oy) / 2 + (y - oy) / 2 * bend;
+        for (let c = 0; c <= fan; c++) { const v = c / fan, px = (1 - v) ** 2 * ox + 2 * v * (1 - v) * bx + v * v * x, py = (1 - v) ** 2 * oy + 2 * v * (1 - v) * by + v * v * y; Q.setXYZ(cap(0, j, c), px, py, z); Q.setXYZ(cap(1, j, c), px, py, -z); } } }
+    Q.needsUpdate = tone.needsUpdate = true; this.back.geometry.computeBoundingSphere();
   }
 }
 

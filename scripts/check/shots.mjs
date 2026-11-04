@@ -6,7 +6,7 @@ import fs from 'fs';
 const [out, viewArg, stateArg] = process.argv.slice(2);
 const near = p => p < 4 ? -1 : 1; // the side the spine faces while the book is shut, and the thicker stack's far side
 const VIEWS = {
-  spine: p => [near(p) * 18, 1.4, 22, near(p) * 3, 1, 4, 11], // desk level, off the spine's end; the near plane skips the pen and pencil lying between camera and book
+  spine: p => [near(p) * 18, 1.4, 22, near(p) * 3, 1, 4, true], // desk level, off the spine's end, with the pen and pencils lifted out of the way
   head: () => [0, 1.4, -26, 0, 1, 0],
   tail: () => [0, 1.4, 26, 0, 1, 0],
   fore: p => [-near(p) * 34, 2.2, 6, 0, 1, 0],
@@ -41,7 +41,8 @@ const frame = () => pg.evaluate(() => new Promise(r => requestAnimationFrame(() 
 const look = (p, c, zoom, exp) => pg.evaluate((p, c, zoom, exp, W, H, K) => {
   const B = __book, cam = B.cam, V = cam.position.constructor; B.set(p); B.book.set(p, 2); B.book.group.position.x = -B.book.centerX(p); B.book.group.updateMatrixWorld(true);
   B.rig.L.box.min.set(-1e3, -1e3, -1e3); B.rig.L.box.max.set(1e3, 1e3, 1e3); B.rig.L.rMin = 1; B.rig.L.thetaMin = -7; B.rig.L.thetaMax = 7; B.rig.L.phiMax = 3; B.rig.L.phiMin = 0.001;
-  cam.near = c[6] || 2; B.rig.lookFrom(new V(c[0], c[1], c[2]), new V(c[3], c[4], c[5])); B.rig.update(1); cam.clearViewOffset(); cam.updateProjectionMatrix(); cam.updateMatrixWorld(true);
+  B.scene.children.forEach(o => { if (o.position.z > 15 && Math.abs(o.position.x) < 20) o.visible = !c[6]; });
+  B.rig.lookFrom(new V(c[0], c[1], c[2]), new V(c[3], c[4], c[5])); B.rig.update(1); cam.clearViewOffset(); cam.updateProjectionMatrix(); cam.updateMatrixWorld(true);
   if (zoom) { // the crop: the spine's middle, at the end of the book nearest this camera
     const P = B.book.spine.geometry.attributes.position, m = B.book.spineSeg, z = Math.abs(c[2]) > Math.abs(c[0]) && Math.abs(c[2]) > Math.abs(c[1]) ? Math.sign(c[2]) * 10.3 : 0;
     const q = new V(P.getX(m), P.getY(m) + 0.8, z).applyMatrix4(B.book.group.matrixWorld).project(cam), w = W / K, h = H / K;
