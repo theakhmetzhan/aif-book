@@ -6,11 +6,13 @@
 // usage: URL=http://localhost:5181/aif-book/ node scripts/check/perf.mjs [out.json] [only=WebKit,Chromium] [pass=time,count,gpu,read,bar,pace] [against=before.json]
 import { webkit, chromium } from 'playwright-core';
 import fs from 'fs';
+import { execSync } from 'child_process';
 const url = process.env.URL || 'http://localhost:5181/aif-book/', args = process.argv.slice(2), opt = k => args.find(a => a.startsWith(k + '='))?.split('=')[1], out = args.find(a => !a.includes('='));
 const CHROME = { executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist', '--enable-precise-memory-info', '--js-flags=--expose-gc'] };
 const PHONE = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true }, DESK = { viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2 };
 const RUNS = [
   { name: 'WebKit phone', type: webkit, ctx: PHONE },
+  { name: 'WebKit phone small cores', type: webkit, ctx: PHONE, small: true }, // WebKit has no throttle: its processes at background priority run on the small cores, a little over half as fast here
   { name: 'Chromium phone', type: chromium, ctx: PHONE, launch: CHROME },
   { name: 'Chromium phone 4x', type: chromium, ctx: PHONE, launch: CHROME, slow: 4 },
   { name: 'Chromium phone 6x', type: chromium, ctx: PHONE, launch: CHROME, slow: 6 },
@@ -153,12 +155,13 @@ const tally = (a, f) => a.reduce((n, x) => n + (f(x) ? 1 : 0), 0);
 for (const run of RUNS) {
   report[run.name] = {}; const phone = run.ctx === PHONE;
   for (const pass of PASSES) {
-    if (pass !== 'time' && run.slow) continue; // the rest read the same with or without a slower processor
+    if (pass !== 'time' && (run.slow || run.small)) continue; // the rest read the same with or without a slower processor
     if (PHONE_ONLY.includes(pass) && !phone) continue;
     const b = await run.type.launch(run.launch || {}), c = await b.newContext(run.ctx), p = await c.newPage();
     const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error' || /GL_INVALID|WebGL:|no image data/.test(m.text())) errs.push(m.text()); }); await p.addInitScript(hooks, pass);
     const t0 = Date.now(); await p.goto(url + (url.includes('?') ? '&' : '?') + (pass === 'read' ? 'p=0' : 'p=3')); await p.waitForFunction(() => document.body.classList.contains('ready'), null, { timeout: 240000 }); await p.evaluate(() => new Promise(r => { const f = () => __perf.firstPicture ? r() : __perf.raf(f); f(); })); const load = Math.round(await p.evaluate(() => __perf.firstPicture));
     if (run.slow) await (await c.newCDPSession(p)).send('Emulation.setCPUThrottlingRate', { rate: run.slow });
+    if (run.small) for (const pid of execSync('pgrep -f "ms-playwright/webkit.*(WebContent|GPU)"').toString().trim().split('\n')) execSync(`taskpolicy -b -p ${pid}`);
     await p.evaluate(() => new Promise(r => { let n = 0; const f = () => ++n > 120 ? r() : __perf.raf(f); f(); })); // past the first frames
     if (PHONE_ONLY.includes(pass)) {
       if (pass === 'read') { await p.evaluate(() => { __perf.on = true; __perf.phase = 'first'; }); const w = await p.evaluate(reading), g = await p.evaluate(() => ({ up: __perf.load, links: __perf.shaders.filter(x => x !== 'load').length })); report[run.name].read = { ...w, firstWorst: r(Math.max(...w.first), 1), againWorst: r(Math.max(...w.again), 1) }; console.log(`${run.name}\tread\tworst gap on a first showing ${r(Math.max(...w.first), 1)} ms, the second time ${r(Math.max(...w.again), 1)} ms`); }
