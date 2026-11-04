@@ -27,6 +27,9 @@ function grainOver(g, w, h, a = 0.4, seed = 5) { g.save(); g.globalCompositeOper
 // Everything outside the reach of the lamp and the window falls off to black with distance from the desk and the board.
 // Implemented through the fog chunks so every built-in material gets it; scene.fog only switches it on.
 export function installDarkness() {
+  // The lightning is the only directional light, and dark but for a moment: while it is, skip its shadow lookups and its shading.
+  const lf = THREE.ShaderChunk.lights_fragment_begin, at = lf.indexOf('getDirectionalLightInfo');
+  THREE.ShaderChunk.lights_fragment_begin = lf.slice(0, at) + lf.slice(at).replace(';', '; if ( directLight.color != vec3( 0.0 ) ) {').replace(/RE_Direct\(.*\);/, '$& }');
   THREE.ShaderChunk.fog_pars_vertex = '#ifdef USE_FOG\n varying vec3 vFogWorld;\n#endif';
   THREE.ShaderChunk.fog_vertex = '#ifdef USE_FOG\n vec4 fogW = vec4( transformed, 1.0 );\n #ifdef USE_INSTANCING\n fogW = instanceMatrix * fogW;\n #endif\n vFogWorld = ( modelMatrix * fogW ).xyz;\n#endif';
   THREE.ShaderChunk.fog_pars_fragment = `#ifdef USE_FOG
@@ -532,12 +535,16 @@ function lights(scene, renderer, mobile, out) {
   const rain = rainGobo(renderer, mobile, out, win); win.map = rain.texture; win.intensity /= rain.glass; scene.add(win, win.target); out.rain = rain;
   ticks.push((t, dt) => rain.update(t, dt));
   // lightning, now and then: the window flashes, the room shows for an instant
-  const flash = new THREE.DirectionalLight('#c9d6ff', 0); flash.position.copy(WINDOW); scene.add(flash);
+  // Its shadow covers the desk and the board, and is drawn only while a strike lasts. Dark, it costs nothing: see installDarkness.
+  const flash = new THREE.DirectionalLight('#c9d6ff', 0); flash.position.copy(WINDOW); flash.castShadow = true; flash.shadow.autoUpdate = false; flash.shadow.needsUpdate = true;
+  flash.shadow.mapSize.set(1024, 1024); flash.shadow.bias = -0.0005; flash.shadow.normalBias = 0.5; flash.shadow.radius = 1; // normalBias: it rakes the board at 7 degrees
+  Object.assign(flash.shadow.camera, { left: -70, right: 70, top: 132, bottom: -122, near: 20, far: 480 }); flash.shadow.camera.updateProjectionMatrix(); scene.add(flash);
   const baseWin = win.intensity; let next = 20 + Math.random() * 25, strike = null;
   out.lightningAt = (t) => { strike = { t0: t, k: 0.7 + Math.random() * 0.6 }; };
   ticks.push(t => {
     if (!strike && t > next && !out.freeze) { strike = { t0: t, k: 0.6 + Math.random() * 0.7 }; next = t + 50 + Math.random() * 70; out.events.lightning?.(1 + Math.random() * 5); }
     let f = 0; if (strike) { const u = t - strike.t0; f = (Math.exp(-((u - 0.05) ** 2) / 0.002) + 0.6 * Math.exp(-((u - 0.28) ** 2) / 0.004) + 0.35 * Math.exp(-((u - 0.5) ** 2) / 0.01)) * strike.k; if (u > 1.2) strike = null; }
+    if (f > 0) { if (!flash.intensity) renderer.shadowMap.needsUpdate = true; flash.shadow.needsUpdate = true; } // the first frame can't wait for main's shadow tick
     win.intensity = baseWin * (1 + f * 7); win.color.setRGB(0.56 + f * 0.3, 0.65 + f * 0.25, 0.84 + f * 0.1); flash.intensity = f * 0.9;
   });
   out.lampObj?.userData.setGlow?.(1);
