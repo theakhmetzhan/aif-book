@@ -261,10 +261,7 @@ export class Book {
       else { const w = (i - nj) / ns, h = 4 * w * (1 - w) * crown; line.push([Sb[0] + (Sf[0] - Sb[0]) * w + mx * h, Sb[1] + (Sf[1] - Sb[1]) * w + my * h]); }
     }
     const P = this.spine.geometry.attributes.position, ring = 2 * (n + 1), set = (i, x, y) => { y = Math.max(y, -BT); P.setXYZ(i * 2, x, y, BH / 2); P.setXYZ(i * 2 + 1, x, y, -BH / 2); }; // the desk stops it
-    for (let i = 0; i <= n; i++) {
-      const [x, y] = line[i], a = line[Math.max(0, i - 1)], b = line[Math.min(n, i + 1)], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = (b[1] - a[1]) / l, ny = -(b[0] - a[0]) / l, inward = nx * mx + ny * my > 0 ? -LINING : LINING; // a joint folded back on itself turns its normal over
-      set(i, x, y); set(ring - 1 - i, x + nx * inward, y + ny * inward);
-    }
+    for (let i = 0; i <= n; i++) { const [x, y] = line[i], k = LINING * Math.min(1, i / nj, (n - i) / nj); set(i, x, y); set(ring - 1 - i, x - mx * k, y - my * k); } // the lining thins out to nothing at the board's edge
     P.needsUpdate = true; this.spine.geometry.computeVertexNormals(); this.spine.geometry.computeBoundingSphere();
     const Q = this.back.geometry.attributes.position, m = this.backSeg + 1;
     S.forEach((s, i) => { const q = s.pivot.position; Q.setXYZ(i, q.x, q.y, PH / 2); Q.setXYZ(i + m, q.x, q.y, -PH / 2); });
