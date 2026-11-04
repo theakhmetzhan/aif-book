@@ -389,7 +389,16 @@ function placeProps(scene, out, kit) {
   const lamp = out.props.lamp; lamp.updateMatrixWorld(true); out.lampObj = lamp;
   const bulb = lamp.localToWorld(lamp.userData.bulb.clone()), aim = lamp.userData.aim.clone().transformDirection(lamp.matrixWorld);
   out.bulb = bulb; out.lampAim = aim;
-  lamp.userData.setCord?.(26);
+  // its cord: on from the base across the wood, square over the desk's left edge, and plumb to the floor. Its centre stays
+  // one radius off the wood, wraps the top's rounded edge (radius 0.8), and swings out a little before it hangs free.
+  const { cord, cordTail } = lamp.userData, from = cord.localToWorld(cordTail.clone()), r = cordTail.y, lip = 0.8, ex = -95 + lip, ey = DESK_Y - lip, n = 5, run = [];
+  const V = (x, y, z) => new THREE.Vector3(x, y, z), wander = k => from.z + Math.sin(k * 1.3) * 0.8, z = wander(n);
+  run.push(V(from.x - 2, DESK_Y + r, from.z)); // a point close to each end of the run keeps the spline from dipping into the wood
+  for (let k = 1; k < n; k++) run.push(V(from.x + (ex - from.x) * k / n, DESK_Y + r, wander(k)));
+  run.push(V(ex + 2, DESK_Y + r, z));
+  for (const a of [0, 30, 60, 90].map(THREE.MathUtils.degToRad)) run.push(V(ex - (lip + r) * Math.sin(a), ey + (lip + r) * Math.cos(a), z));
+  run.push(V(-95.45, DESK_Y - 3, z), V(-95.6, DESK_Y - 8, z), V(-95.6, -76 + r, z));
+  lamp.userData.setCord(run.map(p => cord.worldToLocal(p)));
   // steam rises from the coffee's surface
   const mug = out.props.mug; mug.updateMatrixWorld(true);
   const so = mug.userData.steamOrigin ? mug.localToWorld(mug.userData.steamOrigin.clone()) : mug.position.clone().add(new THREE.Vector3(0, 6, 0));

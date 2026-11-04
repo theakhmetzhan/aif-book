@@ -244,11 +244,10 @@ function bankersLamp(M) {
   // ----- cord: twisted cloth flex leaving the back of the base
   const cordMat = new THREE.MeshStandardMaterial({ color: '#2a1d14', roughness: 0.9, normalMap: cordNormal(), normalScale: new THREE.Vector2(0.9, 0.9) });
   const cord = mesh(new THREE.BufferGeometry(), cordMat, { name: 'cord' }); cord.userData.noFootprint = true;
-  const setCord = (len = 14, drop = 8) => {
-    const pts = [new V3(0, 0.9, -7.3), new V3(0.4, 0.45, -8.6), new V3(1.2, 0.3, -10.5)];
-    const n = Math.max(1, Math.round((len - 10) / 4)); for (let k = 1; k <= n; k++) pts.push(new V3(1.2 + Math.sin(k * 1.3) * 0.8, 0.3, -10.5 - (len - 10) * k / n));
-    pts.push(new V3(1.4, 0.0, -len - 0.8), new V3(1.4, -drop, -len - 1.2));
-    cord.geometry.dispose(); cord.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, 'centripetal'), 120, 0.27, 10);
+  const cordTail = new V3(1.2, 0.27, -10.5); // where the flex settles on the surface: its centre, one radius up
+  const setCord = (run = [new V3(1.3, 0.27, -13), new V3(1.4, 0.27, -15)]) => { // run: its course from there on, in this frame
+    const curve = new THREE.CatmullRomCurve3([new V3(0, 0.9, -7.3), new V3(0.4, 0.45, -8.6), cordTail, ...run], false, 'centripetal'), len = curve.getLength();
+    cord.geometry.dispose(); cord.geometry = new THREE.TubeGeometry(curve, Math.ceil(len * 2), 0.27, 10);
     const uv = cord.geometry.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * len * 1.6);
   };
   setCord();
@@ -261,7 +260,7 @@ function bankersLamp(M) {
   content.add(felt, shade, bulb, screwMesh, ballI, linkI, cord);
   const out = finalize(g, content, { bulb: new V3(0, st + 3.6, 0) });
   out.userData.aim = new V3(0, -Math.cos(tilt), Math.sin(tilt)).normalize();
-  out.userData.shade = shade; out.userData.setCord = setCord; out.userData.cord = cord;
+  out.userData.shade = shade; out.userData.setCord = setCord; out.userData.cord = cord; out.userData.cordTail = cordTail;
   const base = { b: bulbMat.emissiveIntensity, o: opalMat.emissiveIntensity, g: greenMat.emissiveIntensity };
   out.userData.setGlow = (k = 1) => { bulbMat.emissiveIntensity = base.b * k; opalMat.emissiveIntensity = base.o * k; greenMat.emissiveIntensity = base.g * k; };
   return out;
