@@ -6,7 +6,7 @@ const errs=[]; p.on('pageerror',e=>errs.push(e.message)); p.on('console',m=>['er
 await p.goto(''+(process.env.URL||"http://localhost:5181/aif-book/")+'?freeze=1&shot=1&dpr=1&t=2&p=0',{waitUntil:'networkidle0'}); await p.waitForFunction(()=>document.body.classList.contains('ready'),{timeout:90000});
 const r=await p.evaluate(()=>{
   const B=__book.book, S=B.sheets, N=S.length, BT=0.2, W=S[0].yR, V=B.group.position.constructor, dp=0.0025;
-  const out={strip:[1e9,0], desk:0, spineInBlock:0, thickness:[1e9,0], fillOnTurningPage:0, fillJump:0, poseJump:0, spineJump:0, spineCross:0, spineOpen:0, spineInBoard:0, pocket:0, pocketAt:-1, leafCross:0, clothOffDesk:1e9, clothOffDeskAt:-1, boardLift:0, gutterRun:0, angleJump:0, phiReversals:0, phiStep:0};
+  const out={strip:[1e9,0], desk:0, spineInBlock:0, thickness:[1e9,0], fillOnTurningPage:0, fillJump:0, poseJump:0, spineJump:0, spineCross:0, spineOpen:0, spineInBoard:0, pocket:0, pocketAt:-1, leafCross:0, clothOffDesk:1e9, clothOffDeskAt:-1, edgeSeam:0, boardLift:0, gutterRun:0, angleJump:0, phiReversals:0, phiStep:0};
   const at=(s,x,y)=>{const c=Math.cos(s.theta),n=Math.sin(s.theta),q=s.pivot.position;return [q.x+x*c-y*n,q.y+x*n+y*c];};
   // the gaps the eye sees: end-on, the book's section and the desk drawn solid; any air they shut in is a gap, however it is lit
   const C=0.02, X0=-20, Y0=-0.26, GW=2000, GH=150, grid=new Uint8Array(GW*GH);
@@ -53,6 +53,8 @@ const r=await p.evaluate(()=>{
     // a pop-up rises only while its spread opens and falls only while it shuts, a little at a time
     for(const f of B.faces){ const v=f.root.visible?fold(f):0,k=f.spread,last=phi[f.name]; phi[f.name]=v; if(last===undefined) continue; const d=v-last; out.phiStep=Math.max(out.phiStep,Math.abs(d)); if(q>k-1&&q<=k&&d<-1e-6) out.phiReversals++; if(q>k&&q<=k+1&&d>1e-6) out.phiReversals++; }
   }
+  // a paper line runs unbroken from the block's side into its bend: where the end of the block meets a sheet, both must be at the same point of the line pattern
+  for(const q of [0,1,2,3,4,5,6,7,8]){ B.set(q,0); const U=B.back.geometry.attributes.uv; for(let i=1;i<N-1;i++){ const s=S[i], g=s.edge.geometry.attributes.uv; let lo=1e9,hi=-1e9; for(let v=0;v<g.count;v++){ lo=Math.min(lo,g.getY(v)); hi=Math.max(hi,g.getY(v)); } const want=s.e>0.5?lo:hi; out.edgeSeam=Math.max(out.edgeSeam,Math.abs(U.getY(B.rootCap(0,i*B.rootSeg,B.rootFan))-want)); } }
   return out;
 });
 // the owner's top view: what lies between the two surfaces of a first or last spread must render as paper, not as a dark strip. Measured in the rendered frame
@@ -67,5 +69,5 @@ r.gutterTone=await p.evaluate(async()=>{ const B=__book, cam=B.cam, V=cam.positi
 const fails=[]; const need=(c,m)=>{ if(!c) fails.push(m); };
 need(r.strip[1]-r.strip[0]<0.02,'the strip changes length'); need(r.desk>-0.005,'something goes through the desk'); need(r.spineInBlock===0,'the spine enters the block');
 need(r.thickness[1]-r.thickness[0]<1e-4&&r.fillOnTurningPage===0&&r.fillJump<0.05,'a page changes thickness'); need(r.pocket<0.01,'a gap between pages, spine and boards'); need(r.boardLift<0.005,'a board is off the desk'); need(r.gutterRun<0.95&&r.gutterTone>0.5,'a wide dark strip at the gutter');
-need(r.poseJump<0.05,'a sheet jumps'); need(r.spineJump<0.05,'the spine jumps'); need(r.spineCross===0,'the spine passes through itself'); need(r.spineOpen===0,'the spine is open at its head or tail'); need(r.clothOffDesk>0.005,'the inside of the cloth lies in the plane of the desk, which flickers through the joint'); need(r.leafCross<0.02,'leaves in the block pass through each other'); need(r.spineInBoard<0.005,'the spine enters a board'); need(r.angleJump<0.05,'a sheet snaps round'); need(r.phiReversals===0,'a pop-up reverses'); need(r.phiStep<0.1,'a pop-up snaps');
+need(r.poseJump<0.05,'a sheet jumps'); need(r.spineJump<0.05,'the spine jumps'); need(r.spineCross===0,'the spine passes through itself'); need(r.spineOpen===0,'the spine is open at its head or tail'); need(r.clothOffDesk>0.005,'the inside of the cloth lies in the plane of the desk, which flickers through the joint'); need(r.edgeSeam<0.002,'the paper lines break where the block\'s end meets a sheet'); need(r.leafCross<0.02,'leaves in the block pass through each other'); need(r.spineInBoard<0.005,'the spine enters a board'); need(r.angleJump<0.05,'a sheet snaps round'); need(r.phiReversals===0,'a pop-up reverses'); need(r.phiStep<0.1,'a pop-up snaps');
 console.log(JSON.stringify(r,null,1)); console.log('errors',errs); console.log(fails.length?'FAIL: '+fails.join('; '):'PASS'); await b.close(); process.exit(fails.length||errs.length?1:0);

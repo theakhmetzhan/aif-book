@@ -55,7 +55,7 @@ export class Book {
     lg.fillStyle = '#fff'; lg.fillRect(0, 0, 4, 256); for (let y = 0; y < 256; y += 2 + Math.floor(rnd() * 5)) { lg.fillStyle = `rgba(60,42,20,${0.12 + rnd() * rnd() * 0.5})`; lg.fillRect(0, y, 4, 1 + Math.floor(rnd() * 1.4)); }
     const lt = new THREE.CanvasTexture(lc); lt.colorSpace = THREE.SRGBColorSpace; lt.wrapS = lt.wrapT = THREE.RepeatWrapping; lt.anisotropy = renderer.capabilities.getMaxAnisotropy();
     const edgeMat = new THREE.MeshStandardMaterial({ map: lt, color: new THREE.Color(T.paper).multiplyScalar(0.86), roughness: 0.95, side: THREE.DoubleSide });
-    const leafUV = (g, h) => { const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, uv.getY(i) * h / LEAVES); return g; };
+    const leafUV = (g, h, y0) => { const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, (y0 + uv.getY(i) * h) / LEAVES); return g; }; // every edge takes its lines from its height in the shut book, so they run on from one sheet to the next
     const sideMat = new THREE.MeshStandardMaterial({ color: T.clothSide, roughness: 0.8 });
 
     SHEETS.forEach(([front, back, kind], i) => {
@@ -82,7 +82,7 @@ export class Book {
         s.mesh = mesh; if (inner === 'bot') { s.top = BT; s.bot = 0; } else { s.top = 0; s.bot = -BT; }
       } else {
         pivot.add(faceMesh(ft.map, false, ST / 2), faceMesh(bt.map, true, -ST / 2));
-        const edge = new THREE.Mesh(leafUV(new THREE.BoxGeometry(PW, ST, PH), ST), [edgeMat, edgeMat, hidden, hidden, edgeMat, edgeMat]); edge.position.x = G0 + PW / 2; edge.castShadow = edge.receiveShadow = true; pivot.add(edge);
+        const edge = new THREE.Mesh(new THREE.BoxGeometry(PW, ST, PH), [edgeMat, edgeMat, hidden, hidden, edgeMat, edgeMat]); s.edge = edge; edge.position.x = G0 + PW / 2; edge.castShadow = edge.receiveShadow = true; pivot.add(edge);
         s.top = ST / 2; s.bot = -ST / 2;
       }
       // pop-ups glued to either face of this sheet
@@ -120,6 +120,7 @@ export class Book {
       let l = 0; for (let j = 1; j <= i; j++) l += this.gaps[j] + (j < i ? ST : 0);
       s.yL = l + ST / 2;
     }
+    for (let i = 1; i <= NI; i++) leafUV(this.sheets[i].edge.geometry, ST, this.sheets[i].yR - ST / 2);
     this.sheets[0].yR = this.sheets[1].yR + ST / 2 + this.gaps[1]; this.sheets[0].yL = 0;
     this.sheets[N - 1].yR = 0; this.sheets[N - 1].yL = this.sheets[NI].yL + ST / 2 + this.gaps[N - 1];
     // how much each sheet adds to the stack it lies on: its card, and the pop-ups folded under it
@@ -131,7 +132,7 @@ export class Book {
     // flush with the page edges and just overlapping both pages: an inset or a slit leaves lit paper thinner than a pixel,
     // which shimmers along the block whenever the view moves
     for (let k = 1; k < N; k++) {
-      const g = this.gaps[k] + 0.002, m = new THREE.Mesh(leafUV(new THREE.BoxGeometry(PW, g, PH), g), [edgeMat, edgeMat, hidden, hidden, edgeMat, edgeMat]);
+      const g = this.gaps[k] + 0.002, m = new THREE.Mesh(leafUV(new THREE.BoxGeometry(PW, g, PH), g, this.sheets[k].yR + this.sheets[k].top - 0.001), [edgeMat, edgeMat, hidden, hidden, edgeMat, edgeMat]);
       m.position.x = G0 + PW / 2; m.castShadow = m.receiveShadow = true; m.matrixAutoUpdate = false;
       this.sheets[k].pivot.add(m); this.fillers.push({ k, m, g: this.gaps[k] });
     }
@@ -141,7 +142,7 @@ export class Book {
     const cap = this.rootCap = (o, j, c) => (M + 1) * 2 + (o * (M + 1) + j) * (fan + 1) + c; // a leaf's edge from the spine (c = 0) to the end of its sheet (c = fan), at head (o = 0) or tail
     for (let j = 0; j < M; j++) { const a = j * 2; ri.push(a, a + 2, a + 1, a + 2, a + 3, a + 1); }
     for (const o of [0, 1]) for (let j = 0; j < M; j++) for (let c = 0; c < fan; c++) { const a = cap(o, j, c), b = a + fan + 1; ri.push(a, b, a + 1, b, b + 1, a + 1); }
-    for (const o of [0, 1]) for (let j = 0; j <= M; j++) for (let c = 0; c <= fan; c++) { const v = cap(o, j, c) * 2; ruv[v] = c / fan; ruv[v + 1] = j / M * this.W / LEAVES; }
+    for (const o of [0, 1]) for (let j = 0; j <= M; j++) for (let c = 0; c <= fan; c++) { const v = cap(o, j, c) * 2; ruv[v] = c / fan; }
     const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.BufferAttribute(rp, 3)); rg.setAttribute('uv', new THREE.BufferAttribute(ruv, 2)); rg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(rp.length).fill(1), 3)); rg.setIndex(ri); rg.setAttribute('normal', new THREE.BufferAttribute(rp.map((_, i) => i % 3 === (i < (M + 1) * 6 ? 1 : 2) ? 1 : 0), 3)); rg.addGroup(0, 6 * M, 0); // the crease takes the page's light, not the window's
      rg.addGroup(6 * M, 12 * M * fan, 1);
     this.back = new THREE.Mesh(rg, [new THREE.MeshStandardMaterial({ color: T.paper, vertexColors: true, roughness: 0.9, side: THREE.DoubleSide, envMapIntensity: 0.15 }), edgeMat]);
@@ -281,9 +282,10 @@ export class Book {
     P.needsUpdate = true; this.spine.geometry.computeVertexNormals(); this.spine.geometry.computeBoundingSphere();
     // the roots: from each sheet's spine end, just inside it and just under its face so paper meets paper, along a smooth curve to the next sheet's,
     // with the spine beneath; each leaf is rooted on the strip where it lies when the book is shut
-    const cap = this.rootCap, Q = this.back.geometry.attributes.position, tone = this.back.geometry.attributes.color, seg = this.rootSeg, fan = this.rootFan, M = (N - 1) * seg, z = PH / 2 + 0.002;
+    const cap = this.rootCap, Q = this.back.geometry.attributes.position, UV = this.back.geometry.attributes.uv, tone = this.back.geometry.attributes.color, seg = this.rootSeg, fan = this.rootFan, M = (N - 1) * seg, z = PH / 2 + 0.002;
     const tip = s => { const [x, y] = at(s, G0 + 0.02, s.isBoard ? 0 : s.top + (s.bot - s.top) * s.e); return [x, y - 0.004]; }, root = s => s.i === 0 ? n : s.i === N - 1 ? 0 : nj + ns * s.yR / this.W;
     const parted = i => i >= 0 && i < N - 1 ? sstep(0, 0.2, Math.abs(S[i].e - S[i + 1].e)) : 0, kink = S.map((s, i) => Math.max(parted(i - 1), parted(i)));
+    const shut = s => (s.yR + (s.isBoard ? 0 : s.top + (s.bot - s.top) * s.e)) / LEAVES; // where a sheet's face comes in the block's lines
     for (let i = 0; i < N - 1; i++) { const a = tip(S[i]), b = tip(S[i + 1]), ra = root(S[i]), rb = root(S[i + 1]), curve = parted(i); // straight down a stack's back, curved where a page leaves it
       for (let m = 0; m <= seg; m++) { const t = m / seg, j = i * seg + m, x = a[0] + (b[0] - a[0]) * (t + curve * (3 * (1 - t) ** 2 * t * 0.45 + 3 * (1 - t) * t * t * 0.55 + t ** 3 - t)), y = a[1] + (b[1] - a[1]) * (t + curve * (t * t * (3 - 2 * t) - t));
         const r = ra + (rb - ra) * (t + curve * ((a[1] > b[1] ? t ** 3 : 1 - (1 - t) ** 3) - t)), r0 = Math.min(n - 1, Math.floor(r)), f = r - r0, ox = inner[r0][0] + (inner[r0 + 1][0] - inner[r0][0]) * f, oy = inner[r0][1] + (inner[r0 + 1][1] - inner[r0][1]) * f;
@@ -292,9 +294,9 @@ export class Book {
         for (const e of [0, 1]) tone.setXYZ(j * 2 + e, g, g, g);
         Q.setXYZ(j * 2, x, y, PH / 2); Q.setXYZ(j * 2 + 1, x, y, -PH / 2);
         // a leaf leaves its stack level and stands up out of the spine, the bends nested inside each other; the leaves nearest the top page have no room to, and run straight
-        const bend = (1 - kink[i] - (kink[i + 1] - kink[i]) * t) * (1 - Math.min(1, Math.max(0, y / Math.max(1e-6, this.stackH[x < 0 ? 0 : 1]))) ** 2) ** 2, bx = (x + ox) / 2 + (ox - x) / 2 * bend, by = (y + oy) / 2 + (y - oy) / 2 * bend;
-        for (let c = 0; c <= fan; c++) { const v = c / fan, px = (1 - v) ** 2 * ox + 2 * v * (1 - v) * bx + v * v * x, py = (1 - v) ** 2 * oy + 2 * v * (1 - v) * by + v * v * y; Q.setXYZ(cap(0, j, c), px, py, z + j * 1e-4); Q.setXYZ(cap(1, j, c), px, py, -z - j * 1e-4); } } } // each leaf a hair proud of the last, so none shares a plane with its neighbour
-    Q.needsUpdate = tone.needsUpdate = true; this.back.geometry.computeBoundingSphere();
+        const bend = (1 - kink[i] - (kink[i + 1] - kink[i]) * t) * (1 - Math.min(1, Math.max(0, y / Math.max(1e-6, this.stackH[x < 0 ? 0 : 1]))) ** 4), bx = (x + ox) / 2 + (ox - x) / 2 * bend, by = (y + oy) / 2 + (y - oy) / 2 * bend;
+        for (let c = 0; c <= fan; c++) { const v = c / fan, px = (1 - v) ** 2 * ox + 2 * v * (1 - v) * bx + v * v * x, py = (1 - v) ** 2 * oy + 2 * v * (1 - v) * by + v * v * y; Q.setXYZ(cap(0, j, c), px, py, z + j * 1e-4); Q.setXYZ(cap(1, j, c), px, py, -z - j * 1e-4); for (const o of [0, 1]) UV.setY(cap(o, j, c), shut(S[i]) + (shut(S[i + 1]) - shut(S[i])) * t); } } } // each leaf a hair proud of the last, so none shares a plane with its neighbour
+    Q.needsUpdate = UV.needsUpdate = tone.needsUpdate = true; this.back.geometry.computeBoundingSphere();
   }
 }
 
