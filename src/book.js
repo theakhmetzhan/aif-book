@@ -147,7 +147,7 @@ export class Book {
     const n = this.spineSeg, ring = 2 * (n + 1), pos = new Float32Array(ring * 2 * 3), uvs = new Float32Array(ring * 2 * 2), idx = [];
     for (let i = 0; i < ring; i++) for (let e = 0; e < 2; e++) { const j = (i * 2 + e) * 2, t = i <= n ? i / n : (ring - 1 - i) / n; uvs[j] = 1 - e; uvs[j + 1] = t; }
     for (let i = 0; i < ring; i++) { const a = i * 2, b = ((i + 1) % ring) * 2; idx.push(a, b, a + 1, b, b + 1, a + 1); }
-    for (let i = 1; i < n; i++) for (const e of [0, 1]) { const a = (ring - 1 - i) * 2 + e, b = (ring - i) * 2 + e, c = (i - 1) * 2 + e, d = i * 2 + e; idx.push(...(e ? [a, b, c, a, c, d] : [a, c, b, a, d, c])); } // head and tail
+    for (let i = 1; i <= n; i++) for (const e of [0, 1]) { const a = (ring - 1 - i) * 2 + e, b = (ring - i) * 2 + e, c = (i - 1) * 2 + e, d = i * 2 + e; idx.push(...(e ? [a, b, c, a, c, d] : [a, c, b, a, d, c])); } // head and tail
     const sgeo = new THREE.BufferGeometry(); sgeo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); sgeo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2)); sgeo.setIndex(idx); sgeo.addGroup(0, 6 * n, 0); sgeo.addGroup(6 * n, idx.length - 6 * n, 1); // the cloth outside, the lining and cut ends
     this.spine = new THREE.Mesh(sgeo, [new THREE.MeshPhysicalMaterial({ map: spineTex, roughness: 0.75, sheen: 0.6, sheenRoughness: 0.6, sheenColor: new THREE.Color('#7a3a30') }), sideMat]);
     this.spine.castShadow = true; this.spine.receiveShadow = true; this.spine.frustumCulled = false; this.group.add(this.spine);

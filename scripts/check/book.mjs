@@ -6,7 +6,7 @@ const errs=[]; p.on('pageerror',e=>errs.push(e.message)); p.on('console',m=>['er
 await p.goto(''+(process.env.URL||"http://localhost:5181/aif-book/")+'?freeze=1&p=0',{waitUntil:'networkidle0'}); await p.waitForFunction(()=>document.body.classList.contains('ready'),{timeout:90000});
 const r=await p.evaluate(()=>{
   const B=__book.book, S=B.sheets, N=S.length, BT=0.2, W=S[0].yR, V=B.group.position.constructor, dp=0.0025;
-  const out={strip:[1e9,0], desk:0, spineInBlock:0, thickness:[1e9,0], fillOnTurningPage:0, fillJump:0, gutterStep:0, poseJump:0, spineJump:0, spineCross:0, angleJump:0, phiReversals:0, phiStep:0, backGap:0};
+  const out={strip:[1e9,0], desk:0, spineInBlock:0, thickness:[1e9,0], fillOnTurningPage:0, fillJump:0, gutterStep:0, poseJump:0, spineJump:0, spineCross:0, spineOpen:0, angleJump:0, phiReversals:0, phiStep:0, backGap:0};
   const at=(s,x,y)=>{const c=Math.cos(s.theta),n=Math.sin(s.theta),q=s.pivot.position;return [q.x+x*c-y*n,q.y+x*n+y*c];};
   let prev=null, prevSpine=null; const phi={}, fold=f=>Math.PI/2-Math.abs(f.pieces[0].fold.rotation.x);
   for(let i=0;i<=N/dp;i++){ const q=+(i*dp).toFixed(4); B.set(q,0); B.group.updateMatrixWorld(true);
@@ -30,6 +30,8 @@ const r=await p.evaluate(()=>{
     const sv=Array.from(P.array); if(prevSpine) for(let v=0;v<sv.length;v+=3) out.spineJump=Math.max(out.spineJump,Math.hypot(sv[v]-prevSpine[v],sv[v+1]-prevSpine[v+1])); prevSpine=sv;
     // the spine's section never passes through itself: no edge of the loop of cloth and lining crosses another
     { const R=P.count/2, X=j=>[P.getX(j*2),P.getY(j*2)]; for(let a=0;a<R;a++) for(let c=a+2;c<R;c++){ if(a===0&&c===R-1) continue; const A=X(a),A2=X(a+1),D=X(c),D2=X((c+1)%R),u=[A2[0]-A[0],A2[1]-A[1]],w=[D2[0]-D[0],D2[1]-D[1]],det=u[0]*w[1]-u[1]*w[0]; if(Math.abs(det)<1e-9) continue; const t=((D[0]-A[0])*w[1]-(D[1]-A[1])*w[0])/det,e=((D[0]-A[0])*u[1]-(D[1]-A[1])*u[0])/det; if(t>1e-6&&t<1-1e-6&&e>1e-6&&e<1-1e-6) out.spineCross++; } }
+    // and it is closed at head and tail: welded by position, every edge has a face on both sides
+    if(q%1===0){ const I=B.spine.geometry.index.array,key=v=>[P.getX(v),P.getY(v),P.getZ(v)].map(x=>x.toFixed(5)).join(),e={}; for(let t=0;t<I.length;t+=3){ const k=[I[t],I[t+1],I[t+2]].map(key); if(new Set(k).size<3) continue; for(let j=0;j<3;j++){ const m=[k[j],k[(j+1)%3]].sort().join('|'); e[m]=(e[m]||0)+1; } } out.spineOpen+=Object.values(e).filter(c=>c===1).length; }
     // a pop-up rises only while its spread opens and falls only while it shuts, a little at a time
     for(const f of B.faces){ const v=f.root.visible?fold(f):0,k=f.spread,last=phi[f.name]; phi[f.name]=v; if(last===undefined) continue; const d=v-last; out.phiStep=Math.max(out.phiStep,Math.abs(d)); if(q>k-1&&q<=k&&d<-1e-6) out.phiReversals++; if(q>k&&q<=k+1&&d>1e-6) out.phiReversals++; }
   }
@@ -38,5 +40,5 @@ const r=await p.evaluate(()=>{
 const fails=[]; const need=(c,m)=>{ if(!c) fails.push(m); };
 need(r.strip[1]-r.strip[0]<0.02,'the strip changes length'); need(r.desk>-0.005,'something goes through the desk'); need(r.spineInBlock===0,'the spine enters the block');
 need(r.thickness[1]-r.thickness[0]<1e-4&&r.fillOnTurningPage===0&&r.fillJump<0.05,'a page changes thickness'); need(r.gutterStep<0.02,'a step at the gutter'); need(r.backGap<1e-4,'the block leaves the case');
-need(r.poseJump<0.05,'a sheet jumps'); need(r.spineJump<0.05,'the spine jumps'); need(r.spineCross===0,'the spine passes through itself'); need(r.angleJump<0.05,'a sheet snaps round'); need(r.phiReversals===0,'a pop-up reverses'); need(r.phiStep<0.1,'a pop-up snaps');
+need(r.poseJump<0.05,'a sheet jumps'); need(r.spineJump<0.05,'the spine jumps'); need(r.spineCross===0,'the spine passes through itself'); need(r.spineOpen===0,'the spine is open at its head or tail'); need(r.angleJump<0.05,'a sheet snaps round'); need(r.phiReversals===0,'a pop-up reverses'); need(r.phiStep<0.1,'a pop-up snaps');
 console.log(JSON.stringify(r,null,1)); console.log('errors',errs); console.log(fails.length?'FAIL: '+fails.join('; '):'PASS'); await b.close(); process.exit(fails.length||errs.length?1:0);
