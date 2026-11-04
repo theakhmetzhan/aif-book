@@ -1,23 +1,23 @@
 // Sweeps every page turn and measures the book as a physical object; prints the numbers and fails on any that breaks a rule of a real book.
 import puppeteer from 'puppeteer-core';
-const b=await puppeteer.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:'new',args:['--use-angle=metal','--enable-gpu','--ignore-gpu-blocklist']});
+const b=await puppeteer.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:'new',protocolTimeout:600000,args:['--use-angle=metal','--enable-gpu','--ignore-gpu-blocklist']});
 const p=await b.newPage(); await p.setViewport({width:800,height:500});
 const errs=[]; p.on('pageerror',e=>errs.push(e.message)); p.on('console',m=>['error','warn','warning'].includes(m.type())&&errs.push(m.text().slice(0,200)));
 await p.goto(''+(process.env.URL||"http://localhost:5181/aif-book/")+'?freeze=1&shot=1&dpr=1&t=2&p=0',{waitUntil:'networkidle0'}); await p.waitForFunction(()=>document.body.classList.contains('ready'),{timeout:90000});
 const r=await p.evaluate(()=>{
   const B=__book.book, S=B.sheets, N=S.length, BT=0.2, W=S[0].yR, V=B.group.position.constructor, dp=0.0025;
-  const out={strip:[1e9,0], desk:0, spineInBlock:0, thickness:[1e9,0], fillOnTurningPage:0, fillJump:0, poseJump:0, spineJump:0, spineCross:0, spineOpen:0, spineInBoard:0, pocket:0, pocketAt:-1, leafCross:0, clothOffDesk:1e9, clothOffDeskAt:-1, edgeSeam:0, boardLift:0, gutterRun:0, angleJump:0, phiReversals:0, phiStep:0};
+  const out={strip:[1e9,0], desk:0, spineInBlock:0, thickness:[1e9,0], fillOnTurningPage:0, fillJump:0, poseJump:0, spineJump:0, spineCross:0, spineOpen:0, spineInBoard:0, pocket:0, pocketAt:-1, airUnder:0, leafCross:0, clothOffDesk:1e9, clothOffDeskAt:-1, edgeSeam:0, boardLift:0, gutterRun:0, angleJump:0, phiReversals:0, phiStep:0};
   const at=(s,x,y)=>{const c=Math.cos(s.theta),n=Math.sin(s.theta),q=s.pivot.position;return [q.x+x*c-y*n,q.y+x*n+y*c];};
   // the gaps the eye sees: end-on, the book's section and the desk drawn solid; any air they shut in is a gap, however it is lit
-  const C=0.02, X0=-20, Y0=-0.26, GW=2000, GH=150, grid=new Uint8Array(GW*GH);
+  const PH=20, C=0.02, X0=-20, Y0=-0.26, GW=2000, GH=150, grid=new Uint8Array(GW*GH);
   const tri=(a,b,c)=>{ const lo=Math.floor((Math.min(a[1],b[1],c[1])-Y0)/C), hi=Math.ceil((Math.max(a[1],b[1],c[1])-Y0)/C); for(let r=Math.max(0,lo);r<=Math.min(GH-1,hi);r++){ const y=Y0+(r+.5)*C; let x0=1e9,x1=-1e9; for(const [p,q] of [[a,b],[b,c],[c,a]]){ if((p[1]-y)*(q[1]-y)>0) continue; if(p[1]===q[1]){ x0=Math.min(x0,p[0],q[0]); x1=Math.max(x1,p[0],q[0]); continue; } const x=p[0]+(q[0]-p[0])*(y-p[1])/(q[1]-p[1]); x0=Math.min(x0,x); x1=Math.max(x1,x); } if(x1<x0) continue; for(let k=Math.max(0,Math.floor((x0-X0)/C));k<=Math.min(GW-1,Math.floor((x1-X0)/C));k++) grid[r*GW+k]=1; } };
   const line=(a,b)=>{ const n=Math.ceil(Math.hypot(a[0]-b[0],a[1]-b[1])/C*2)+1; for(let i=0;i<=n;i++){ const x=a[0]+(b[0]-a[0])*i/n,y=a[1]+(b[1]-a[1])*i/n,k=Math.floor((x-X0)/C),r=Math.floor((y-Y0)/C); if(k>=0&&k<GW&&r>=0&&r<GH) grid[r*GW+k]=1; } };
   const quad=(s,x0,x1,y0,y1)=>{ const p=[at(s,x0,y0),at(s,x1,y0),at(s,x1,y1),at(s,x0,y1)]; tri(p[0],p[1],p[2]); tri(p[0],p[2],p[3]); };
-  const mesh=m=>{ const P=m.geometry.attributes.position,I=m.geometry.index.array,v=i=>[P.getX(i),P.getY(i)]; for(let t=0;t<I.length;t+=3){ const a=v(I[t]),b=v(I[t+1]),c=v(I[t+2]); tri(a,b,c); line(a,b); line(b,c); line(c,a); } };
-  const pockets=()=>{ grid.fill(0); for(let r=0;r<GH&&Y0+(r+1)*C<=-BT+0.001;r++) grid.fill(1,r*GW,(r+1)*GW);
+  const mesh=(m,end)=>{ const P=m.geometry.attributes.position,I=m.geometry.index.array,v=i=>[P.getX(i),P.getY(i)],on=i=>P.getZ(i)*end>=PH/2; for(let t=0;t<I.length;t+=3){ if(!on(I[t])||!on(I[t+1])||!on(I[t+2])) continue; const a=v(I[t]),b=v(I[t+1]),c=v(I[t+2]); tri(a,b,c); line(a,b); line(b,c); line(c,a); } };
+  const pockets=end=>{ grid.fill(0); for(let r=0;r<GH&&Y0+(r+1)*C<=-BT+0.001;r++) grid.fill(1,r*GW,(r+1)*GW);
     for(const s of S) quad(s,s.isBoard?0:0.07,s.isBoard?14.3:14.07,s.bot,s.top);
     for(const f of B.fillers){ if(!f.m.visible) continue; const s=S.find(t=>t.pivot===f.m.parent),e=f.m.matrix.elements,v=(x,y)=>at(s,e[0]*x+e[4]*y+e[12],e[5]*y+e[13]),a=v(-7,-f.g/2),b=v(7,-f.g/2),c=v(7,f.g/2),d=v(-7,f.g/2); tri(a,b,c); tri(a,c,d); }
-    mesh(B.spine); mesh(B.back);
+    mesh(B.spine,end); mesh(B.back,end); // only what stands at this end of the book: a surface further in cannot close a gap in the end the eye sees
     const st=[]; for(let k=0;k<GW;k++) if(!grid[(GH-1)*GW+k]){ grid[(GH-1)*GW+k]=2; st.push((GH-1)*GW+k); } for(let r=0;r<GH;r++) for(const k of [0,GW-1]) if(!grid[r*GW+k]){ grid[r*GW+k]=2; st.push(r*GW+k); }
     while(st.length){ const i=st.pop(),k=i%GW; for(const j of [k>0?i-1:-1,k<GW-1?i+1:-1,i-GW,i+GW]) if(j>=0&&j<grid.length&&!grid[j]){ grid[j]=2; st.push(j); } }
     let n=0; for(let i=0;i<grid.length;i++) if(!grid[i]) n++; return n*C*C; };
@@ -39,7 +39,7 @@ const r=await p.evaluate(()=>{
     if(Math.abs(q-Math.round(q))<1e-6&&q>=1&&q<=N-1){ const k=Math.round(q),L=S[k-1],R=S[k]; out.gutterRun=Math.max(out.gutterRun,Math.abs(at(L,L.isBoard?0:0.07,0)[0]-at(R,R.isBoard?0:0.07,0)[0])); }
     { const P=B.back.geometry.attributes.position, F=B.rootFan, M=(N-1)*B.rootSeg; let fold=0; for(let j=0;j<M;j++) for(let c=0;c<F;c++){ const a=B.rootCap(0,j,c), d=a+F+1, u=[P.getX(d)-P.getX(a),P.getY(d)-P.getY(a)], w=[P.getX(a+1)-P.getX(a),P.getY(a+1)-P.getY(a)]; fold+=Math.max(0,u[1]*w[0]-u[0]*w[1]); } out.leafCross=Math.max(out.leafCross,fold); } // cm² of the block's ends where leaves pass through each other: they may fan, not cross
     { const P=B.spine.geometry.attributes.position, n=B.spineSeg, ring=2*(n+1); for(let k=1;k<n;k++){ const h=P.getY((ring-1-k)*2)+BT; if(h<out.clothOffDesk){ out.clothOffDesk=h; out.clothOffDeskAt=q; } } } // the cloth's inside, lying on the desk: level with it, the two fight for the same pixels and the desk flickers through the joint
-    if(i%8===0){ const a=pockets(); if(a>out.pocket){ out.pocket=a; out.pocketAt=q; } }
+    if(i%8===0){ const a=Math.max(pockets(1),pockets(-1)); if(a>out.pocket){ out.pocket=a; out.pocketAt=q; } }
     // open, both boards lie on the desk: no ramp, nothing floating
     if(q>=1&&q<=N-1) for(const s of [S[0],S[N-1]]) for(const x of [0,14.3]) out.boardLift=Math.max(out.boardLift,at(s,x,s===S[0]?s.top:s.bot)[1]+BT);
     // nothing jumps: every sheet moves and turns continuously
@@ -53,6 +53,11 @@ const r=await p.evaluate(()=>{
     // a pop-up rises only while its spread opens and falls only while it shuts, a little at a time
     for(const f of B.faces){ const v=f.root.visible?fold(f):0,k=f.spread,last=phi[f.name]; phi[f.name]=v; if(last===undefined) continue; const d=v-last; out.phiStep=Math.max(out.phiStep,Math.abs(d)); if(q>k-1&&q<=k&&d<-1e-6) out.phiReversals++; if(q>k&&q<=k+1&&d>1e-6) out.phiReversals++; }
   }
+  // at rest nothing hangs in the air, so over the strip every column from the top page down to the desk is solid: this also sees an opening that a crease leaves connected to the air above
+  const airUnder=()=>{ const a=Math.round((S[0].pivot.position.x-X0)/C), b=Math.round((S[N-1].pivot.position.x-X0)/C); let n=0; for(let k=Math.min(a,b);k<=Math.max(a,b);k++){ let seen=false; for(let r=GH-1;r>=0;r--){ if(grid[r*GW+k]===1) seen=true; else if(seen) n++; } } return n*C*C; };
+  for(let q=0;q<=N;q++){ B.set(q,0); for(const end of [1,-1]){ pockets(end); out.airUnder=Math.max(out.airUnder,airUnder()); } }
+  // and the measure must work: with the block's ends pulled in from head and tail, the section is open
+  { B.set(4,0); const P=B.back.geometry.attributes.position,z=[]; for(let i=0;i<P.count;i++){ z.push(P.getZ(i)); P.setZ(i,0); } pockets(1); out.capsGone=airUnder(); z.forEach((v,i)=>P.setZ(i,v)); }
   // a paper line runs unbroken from the block's side into its bend: where the end of the block meets a sheet, both must be at the same point of the line pattern
   for(const q of [0,1,2,3,4,5,6,7,8]){ B.set(q,0); const U=B.back.geometry.attributes.uv; for(let i=1;i<N-1;i++){ const s=S[i], g=s.edge.geometry.attributes.uv; let lo=1e9,hi=-1e9; for(let v=0;v<g.count;v++){ lo=Math.min(lo,g.getY(v)); hi=Math.max(hi,g.getY(v)); } const want=s.e>0.5?lo:hi; out.edgeSeam=Math.max(out.edgeSeam,Math.abs(U.getY(B.rootCap(0,i*B.rootSeg,B.rootFan))-want)); } }
   return out;
@@ -69,5 +74,5 @@ r.gutterTone=await p.evaluate(async()=>{ const B=__book, cam=B.cam, V=cam.positi
 const fails=[]; const need=(c,m)=>{ if(!c) fails.push(m); };
 need(r.strip[1]-r.strip[0]<0.02,'the strip changes length'); need(r.desk>-0.005,'something goes through the desk'); need(r.spineInBlock===0,'the spine enters the block');
 need(r.thickness[1]-r.thickness[0]<1e-4&&r.fillOnTurningPage===0&&r.fillJump<0.05,'a page changes thickness'); need(r.pocket<0.01,'a gap between pages, spine and boards'); need(r.boardLift<0.005,'a board is off the desk'); need(r.gutterRun<0.95&&r.gutterTone>0.5,'a wide dark strip at the gutter');
-need(r.poseJump<0.05,'a sheet jumps'); need(r.spineJump<0.05,'the spine jumps'); need(r.spineCross===0,'the spine passes through itself'); need(r.spineOpen===0,'the spine is open at its head or tail'); need(r.clothOffDesk>0.005,'the inside of the cloth lies in the plane of the desk, which flickers through the joint'); need(r.edgeSeam<0.002,'the paper lines break where the block\'s end meets a sheet'); need(r.leafCross<0.02,'leaves in the block pass through each other'); need(r.spineInBoard<0.005,'the spine enters a board'); need(r.angleJump<0.05,'a sheet snaps round'); need(r.phiReversals===0,'a pop-up reverses'); need(r.phiStep<0.1,'a pop-up snaps');
+need(r.poseJump<0.05,'a sheet jumps'); need(r.spineJump<0.05,'the spine jumps'); need(r.spineCross===0,'the spine passes through itself'); need(r.spineOpen===0,'the spine is open at its head or tail'); need(r.clothOffDesk>0.005,'the inside of the cloth lies in the plane of the desk, which flickers through the joint'); need(r.airUnder<0.01,'air under the paper at the end of the block'); need(r.capsGone>0.5,'the gap check cannot see a missing end of the block'); need(r.edgeSeam<0.002,'the paper lines break where the block\'s end meets a sheet'); need(r.leafCross<0.02,'leaves in the block pass through each other'); need(r.spineInBoard<0.005,'the spine enters a board'); need(r.angleJump<0.05,'a sheet snaps round'); need(r.phiReversals===0,'a pop-up reverses'); need(r.phiStep<0.1,'a pop-up snaps');
 console.log(JSON.stringify(r,null,1)); console.log('errors',errs); console.log(fails.length?'FAIL: '+fails.join('; '):'PASS'); await b.close(); process.exit(fails.length||errs.length?1:0);
