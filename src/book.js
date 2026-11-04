@@ -245,7 +245,7 @@ export class Book {
     const at = (s, lx, ly) => { const c = Math.cos(s.theta), sn = Math.sin(s.theta), q = s.pivot.position; return [q.x + lx * c - ly * sn, q.y + lx * sn + ly * c]; };
     const n = this.spineSeg, nj = 5, ns = n - 2 * nj, F = at(cov, 0, 0), B = at(bk, 0, 0), Cf = at(cov, 0, cov.top), Cb = at(bk, 0, bk.bot);
     const len = Math.hypot(F[0] - B[0], F[1] - B[1]), tx = (F[0] - B[0]) / len, ty = (F[1] - B[1]) / len, mx = -ty, my = tx; // along the strip, back to front, and outward
-    const crown = CROWN * Math.abs(F[1] - B[1]) / this.W; // pressed flat by the desk mid-book, its round comes back as it stands up
+    const crown = CROWN * ((F[1] - B[1]) / this.W) ** 2; // pressed flat by the desk mid-book, its round comes back as it stands up
     // it keeps its length: what the round gives back widens it, and the joints take that up
     const c0 = this.W - 0.04, arc = c0 + 8 * CROWN * CROWN / (3 * c0), chord = (arc + Math.sqrt(arc * arc - 32 * crown * crown / 3)) / 2;
     const end = dir => [(F[0] + B[0] - tx * dir * chord) / 2 + mx * STRIP, (F[1] + B[1] - ty * dir * chord) / 2 + my * STRIP], Sb = end(1), Sf = end(-1);
@@ -260,10 +260,10 @@ export class Book {
       else if (i > n - nj) line.push(joint(Cf, cov, Sf, 1, (n - i) / nj));
       else { const w = (i - nj) / ns, h = 4 * w * (1 - w) * crown; line.push([Sb[0] + (Sf[0] - Sb[0]) * w + mx * h, Sb[1] + (Sf[1] - Sb[1]) * w + my * h]); }
     }
-    const P = this.spine.geometry.attributes.position, ring = 2 * (n + 1), set = (i, x, y) => { P.setXYZ(i * 2, x, y, BH / 2); P.setXYZ(i * 2 + 1, x, y, -BH / 2); };
+    const P = this.spine.geometry.attributes.position, ring = 2 * (n + 1), set = (i, x, y) => { y = Math.max(y, -BT); P.setXYZ(i * 2, x, y, BH / 2); P.setXYZ(i * 2 + 1, x, y, -BH / 2); }; // the desk stops it
     for (let i = 0; i <= n; i++) {
-      const [x, y] = line[i], a = line[Math.max(0, i - 1)], b = line[Math.min(n, i + 1)], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = (b[1] - a[1]) / l, ny = -(b[0] - a[0]) / l;
-      set(i, x, y); set(ring - 1 - i, x + nx * LINING, y + ny * LINING);
+      const [x, y] = line[i], a = line[Math.max(0, i - 1)], b = line[Math.min(n, i + 1)], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = (b[1] - a[1]) / l, ny = -(b[0] - a[0]) / l, inward = nx * mx + ny * my > 0 ? -LINING : LINING; // a joint folded back on itself turns its normal over
+      set(i, x, y); set(ring - 1 - i, x + nx * inward, y + ny * inward);
     }
     P.needsUpdate = true; this.spine.geometry.computeVertexNormals(); this.spine.geometry.computeBoundingSphere();
     const Q = this.back.geometry.attributes.position, m = this.backSeg + 1;
