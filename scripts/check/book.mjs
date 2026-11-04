@@ -26,10 +26,10 @@ const r=await p.evaluate(()=>{
     if(Math.abs(q-Math.round(q))<1e-6&&q>=1&&q<=N-1){ const k=Math.round(q),L=S[k-1],R=S[k],y0=(s,y)=>{const a=at(s,0,y),u=[Math.cos(s.theta),Math.sin(s.theta)];return a[1]-a[0]/u[0]*u[1];}; out.gutterStep=Math.max(out.gutterStep,Math.abs(y0(L,L.bot)-y0(R,R.top))); }
     // nothing jumps: every sheet moves and turns continuously
     const now=S.map(s=>[s.pivot.position.x,s.pivot.position.y,s.theta]); if(prev) now.forEach((a,j)=>{out.poseJump=Math.max(out.poseJump,Math.hypot(a[0]-prev[j][0],a[1]-prev[j][1])); out.angleJump=Math.max(out.angleJump,Math.abs(a[2]-prev[j][2]));}); prev=now;
-    // the spine's section never passes through itself: no edge of the loop of cloth and lining crosses another
-    { const R=P.count/2, X=j=>[P.getX(j*2),P.getY(j*2)]; for(let a=0;a<R;a++) for(let c=a+2;c<R;c++){ if(a===0&&c===R-1) continue; const A=X(a),A2=X(a+1),D=X(c),D2=X((c+1)%R),u=[A2[0]-A[0],A2[1]-A[1]],w=[D2[0]-D[0],D2[1]-D[1]],det=u[0]*w[1]-u[1]*w[0]; if(Math.abs(det)<1e-9) continue; const t=((D[0]-A[0])*w[1]-(D[1]-A[1])*w[0])/det,e=((D[0]-A[0])*u[1]-(D[1]-A[1])*u[0])/det; if(t>1e-6&&t<1-1e-6&&e>1e-6&&e<1-1e-6) out.spineCross++; } }
     // nor does any part of the spine, cloth or lining
     const sv=Array.from(P.array); if(prevSpine) for(let v=0;v<sv.length;v+=3) out.spineJump=Math.max(out.spineJump,Math.hypot(sv[v]-prevSpine[v],sv[v+1]-prevSpine[v+1])); prevSpine=sv;
+    // the spine's section never passes through itself: no edge of the loop of cloth and lining crosses another
+    { const R=P.count/2, X=j=>[P.getX(j*2),P.getY(j*2)]; for(let a=0;a<R;a++) for(let c=a+2;c<R;c++){ if(a===0&&c===R-1) continue; const A=X(a),A2=X(a+1),D=X(c),D2=X((c+1)%R),u=[A2[0]-A[0],A2[1]-A[1]],w=[D2[0]-D[0],D2[1]-D[1]],det=u[0]*w[1]-u[1]*w[0]; if(Math.abs(det)<1e-9) continue; const t=((D[0]-A[0])*w[1]-(D[1]-A[1])*w[0])/det,e=((D[0]-A[0])*u[1]-(D[1]-A[1])*u[0])/det; if(t>1e-6&&t<1-1e-6&&e>1e-6&&e<1-1e-6) out.spineCross++; } }
     // a pop-up rises only while its spread opens and falls only while it shuts, a little at a time
     for(const f of B.faces){ const v=f.root.visible?fold(f):0,k=f.spread,last=phi[f.name]; phi[f.name]=v; if(last===undefined) continue; const d=v-last; out.phiStep=Math.max(out.phiStep,Math.abs(d)); if(q>k-1&&q<=k&&d<-1e-6) out.phiReversals++; if(q>k&&q<=k+1&&d>1e-6) out.phiReversals++; }
   }
