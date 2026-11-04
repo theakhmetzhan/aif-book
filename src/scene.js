@@ -516,7 +516,7 @@ function lights(scene, renderer, mobile, out) {
   scene.add(lamp, lamp.target);
   // warm bounce off the desk and the pages onto the board. A spot aimed up at the board, so nothing in front of it
   // (the desk's front edge, the props' faces) catches a highlight from a light that isn't there.
-  const bounce = new THREE.SpotLight('#ff9d55', 750, 130, 1.2, 1, 2); bounce.position.set(0, 6, -14); bounce.target.position.set(0, 44, -46); scene.add(bounce, bounce.target);
+  const bounce = new THREE.SpotLight('#ff9d55', 1300, 130, 1.35, 1, 2); bounce.position.set(0, 6, -14); bounce.target.position.set(15, 44, -46); scene.add(bounce, bounce.target);
   // the window: cool night light through venetian blinds with rain on the glass
   const win = new THREE.SpotLight('#8fa6d6', 56000, 460, 0.44, 0.45, 2);
   win.position.copy(WINDOW); win.target.position.set(6, 28, -30); win.castShadow = true; win.shadow.mapSize.set(1024, 1024); win.shadow.bias = -0.0003; win.shadow.normalBias = 0.06; win.shadow.radius = 2;
@@ -535,7 +535,7 @@ function lights(scene, renderer, mobile, out) {
   // the room's reflections put the lamp off to the left, right for everything else on the desk; the lamp's own brass sees it
   // overhead. Satin, not polished: its light is a shade's whole mouth, which a single point would mirror as a blown-out dot.
   if (out.lampObj) { const up = out.bulb.clone().sub(out.lampObj.position).normalize().multiplyScalar(2.9), env = roomEnvironment(renderer, up.toArray());
-    out.lampObj.traverse(m => { if (m.isMesh && m.material.metalness === 1) { m.material = m.material.clone(); Object.assign(m.material, { envMap: env, roughnessMap: null, roughness: 0.5, clearcoat: 0 }); } }); }
+    out.lampObj.traverse(m => { if (m.isMesh && m.material.metalness === 1) { m.material = m.material.clone(); Object.assign(m.material, { envMap: env, envMapIntensity: 0.35, roughnessMap: null, roughness: 0.34, clearcoat: 0 }); } }); }
   out.lamp = lamp; out.win = win;
 }
 
