@@ -195,6 +195,8 @@ export class Book {
 
   // where what is visible sits in the book's own frame, whose x = 0 is the crease once open: the shut book centred, the open case fixed on the desk while the crease crosses it
   centerX() { return this.cx; }
+  // how high the two stacks stand with the book lying open at spread k
+  stacks(k) { let L = 0, R = 0; for (const s of this.sheets) if (s.i < k) L += s.addL; else R += s.addR; return [L, R]; }
 
   // pages do not lift on hover (a third, hover argument is ignored): a lifted page opens a wedge in the block and squeezes
   // the pop-ups on the facing page flat
