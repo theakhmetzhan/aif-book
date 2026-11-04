@@ -155,7 +155,7 @@ export class Book {
     for (let i = 0; i < ring; i++) { const a = i * 2, b = ((i + 1) % ring) * 2; idx.push(a, b, a + 1, b, b + 1, a + 1); }
     for (let i = 1; i <= n; i++) for (const e of [0, 1]) { const a = (ring - 1 - i) * 2 + e, b = (ring - i) * 2 + e, c = (i - 1) * 2 + e, d = i * 2 + e; idx.push(...(e ? [a, b, c, a, c, d] : [a, c, b, a, d, c])); } // head and tail
     const sgeo = new THREE.BufferGeometry(); sgeo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); sgeo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2)); sgeo.setIndex(idx); sgeo.addGroup(0, 6 * n, 0); sgeo.addGroup(6 * n, idx.length - 6 * n, 1); // the cloth outside, the lining and cut ends
-    this.spine = new THREE.Mesh(sgeo, [new THREE.MeshPhysicalMaterial({ map: spineTex, roughness: 0.75, sheen: 0.6, sheenRoughness: 0.6, sheenColor: new THREE.Color('#7a3a30') }), new THREE.MeshStandardMaterial({ color: '#8a3a30', roughness: 0.85 })]);
+    this.spine = new THREE.Mesh(sgeo, [new THREE.MeshPhysicalMaterial({ map: spineTex, roughness: 0.75, sheen: 0.6, sheenRoughness: 0.6, sheenColor: new THREE.Color('#7a3a30') }), new THREE.MeshStandardMaterial({ color: '#6a2a24', roughness: 0.85 })]);
     this.spine.castShadow = true; this.spine.receiveShadow = true; this.spine.frustumCulled = false; this.group.add(this.spine);
     this.p = -1; this.set(0);
   }
@@ -278,12 +278,10 @@ export class Book {
     P.needsUpdate = true; this.spine.geometry.computeVertexNormals(); this.spine.geometry.computeBoundingSphere();
     // the roots: from each sheet's spine end, just inside it and just under its face so paper meets paper, along a smooth curve to the next sheet's,
     // with the spine beneath; each leaf is rooted on the strip where it lies when the book is shut
-    const Q = this.back.geometry.attributes.position, seg = this.rootSeg, M = (N - 1) * seg, z = PH / 2 - 0.01, put = (o, j, e, x, y, zz) => Q.setXYZ((o * (M + 1) + j) * 2 + e, x, y, zz);
-    const face = (s, up) => at(s, G0 + 0.02, s.isBoard ? 0 : up ? s.top + (s.bot - s.top) * s.e : s.bot + (s.top - s.bot) * s.e), root = s => s.i === 0 ? n : s.i === N - 1 ? 0 : nj + ns * s.yR / this.W;
-    // in a stack each sheet's end stops short of the one above it, so the roots reach up under that overhang, and let go of it as that sheet lifts away
-    const tip = s => { const on = s.e >= 1 ? S[s.i + 1] : s.e <= 0 ? S[s.i - 1] : null, k = on ? sstep(0.8, 1, s.e >= 1 ? on.e : 1 - on.e) : 0, [x, y] = face(s, true); return [x, y + ((on ? face(on, false)[1] : y) - y) * k - 0.004]; };
-    for (let i = 0; i < N - 1; i++) { const a = tip(S[i]), b = tip(S[i + 1]), ra = root(S[i]), rb = root(S[i + 1]);
-      for (let m = 0; m <= seg; m++) { const t = m / seg, j = i * seg + m, x = a[0] + (b[0] - a[0]) * (3 * (1 - t) ** 2 * t * 0.45 + 3 * (1 - t) * t * t * 0.55 + t ** 3), y = a[1] + (b[1] - a[1]) * t * t * (3 - 2 * t);
+    const Q = this.back.geometry.attributes.position, seg = this.rootSeg, M = (N - 1) * seg, z = PH / 2 + 0.002, put = (o, j, e, x, y, zz) => Q.setXYZ((o * (M + 1) + j) * 2 + e, x, y, zz);
+    const tip = s => { const [x, y] = at(s, G0 + 0.02, s.isBoard ? 0 : s.top + (s.bot - s.top) * s.e); return [x, y - 0.004]; }, root = s => s.i === 0 ? n : s.i === N - 1 ? 0 : nj + ns * s.yR / this.W;
+    for (let i = 0; i < N - 1; i++) { const a = tip(S[i]), b = tip(S[i + 1]), ra = root(S[i]), rb = root(S[i + 1]), curve = sstep(0, 0.2, Math.abs(S[i].e - S[i + 1].e)); // straight down a stack's back, curved where a page leaves it
+      for (let m = 0; m <= seg; m++) { const t = m / seg, j = i * seg + m, x = a[0] + (b[0] - a[0]) * (t + curve * (3 * (1 - t) ** 2 * t * 0.45 + 3 * (1 - t) * t * t * 0.55 + t ** 3 - t)), y = a[1] + (b[1] - a[1]) * (t + curve * (t * t * (3 - 2 * t) - t));
         const r = ra + (rb - ra) * t, r0 = Math.min(n - 1, Math.floor(r)), f = r - r0, ox = inner[r0][0] + (inner[r0 + 1][0] - inner[r0][0]) * f, oy = inner[r0][1] + (inner[r0 + 1][1] - inner[r0][1]) * f;
         put(0, j, 0, x, y, z); put(0, j, 1, x, y, -z); put(1, j, 0, ox, oy, z); put(1, j, 1, x, y, z); put(2, j, 0, ox, oy, -z); put(2, j, 1, x, y, -z); } }
     Q.needsUpdate = true; this.back.geometry.computeVertexNormals(); this.back.geometry.computeBoundingSphere();

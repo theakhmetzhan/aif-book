@@ -30,7 +30,7 @@ const COMPLAINTS = [
   ['CP1', 'a few thick dark and pale bands, not a block of paper', 'owner-low, tail at every state'],
 ];
 const views = viewArg && viewArg !== 'all' ? viewArg.split(',') : Object.keys(VIEWS);
-const states = stateArg ? stateArg.split(',').map(Number) : Array.from({ length: 65 }, (_, i) => i / 8);
+const states = stateArg ? stateArg.split(',').map(Number) : Array.from({ length: 65 }, (_, i) => i / 8), rests = [0, 1, 2, 3, 4, 5, 6, 7, 8];
 const url = process.env.URL || 'http://localhost:5181/aif-book/', W = 1920, H = 1080, K = 3;
 const b = await puppeteer.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: 'new', protocolTimeout: 600000, args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const pg = await b.newPage(); await pg.setViewport({ width: W, height: H });
@@ -51,7 +51,7 @@ const look = (p, c, zoom, exp) => pg.evaluate((p, c, zoom, exp, W, H, K) => {
 }, p, c, zoom, exp, W, H, K);
 for (const v of views) {
   fs.mkdirSync(`${out}/${v}`, { recursive: true });
-  for (const p of states) {
+  for (const p of v === 'owner-rec-under' && !stateArg ? rests : states) {
     const n = `${out}/${v}/p${p.toFixed(3).padStart(5, '0')}`, c = VIEWS[v](p);
     await look(p, c, false, +(process.env.EXP || 1)); await frame(); await pg.screenshot({ path: `${n}.png` });
     await look(p, c, true, +(process.env.EXP_CROP || 2)); await frame(); await pg.screenshot({ path: `${n}_crop.png` });
@@ -59,4 +59,4 @@ for (const v of views) {
   await pg.evaluate(() => __book.cam.clearViewOffset());
 }
 fs.writeFileSync(`${out}/COMPLAINTS.json`, JSON.stringify(COMPLAINTS, null, 1));
-console.log(JSON.stringify({ views, states: states.length, frames: views.length * states.length * 2, errors: errs })); await b.close(); process.exit(errs.length ? 1 : 0);
+console.log(JSON.stringify({ views, errors: errs })); await b.close(); process.exit(errs.length ? 1 : 0);

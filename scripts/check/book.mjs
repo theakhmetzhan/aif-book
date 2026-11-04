@@ -16,7 +16,7 @@ const r=await p.evaluate(()=>{
   const mesh=m=>{ const P=m.geometry.attributes.position,I=m.geometry.index.array,v=i=>[P.getX(i),P.getY(i)]; for(let t=0;t<I.length;t+=3){ const a=v(I[t]),b=v(I[t+1]),c=v(I[t+2]); tri(a,b,c); line(a,b); line(b,c); line(c,a); } };
   const pockets=()=>{ grid.fill(0); for(let r=0;r<GH&&Y0+(r+1)*C<=-BT+0.001;r++) grid.fill(1,r*GW,(r+1)*GW);
     for(const s of S) quad(s,s.isBoard?0:0.07,s.isBoard?14.3:14.07,s.bot,s.top);
-    for(const f of B.fillers){ if(!f.m.visible) continue; const s=S.find(t=>t.pivot===f.m.parent),h=f.g*f.m.scale.y/2; quad(s,0.07,14.07,f.m.position.y-h,f.m.position.y+h); }
+    for(const f of B.fillers){ if(!f.m.visible) continue; const s=S.find(t=>t.pivot===f.m.parent),e=f.m.matrix.elements,v=(x,y)=>at(s,e[0]*x+e[4]*y+e[12],e[5]*y+e[13]),a=v(-7,-f.g/2),b=v(7,-f.g/2),c=v(7,f.g/2),d=v(-7,f.g/2); tri(a,b,c); tri(a,c,d); }
     mesh(B.spine); mesh(B.back);
     const st=[]; for(let k=0;k<GW;k++) if(!grid[(GH-1)*GW+k]){ grid[(GH-1)*GW+k]=2; st.push((GH-1)*GW+k); } for(let r=0;r<GH;r++) for(const k of [0,GW-1]) if(!grid[r*GW+k]){ grid[r*GW+k]=2; st.push(r*GW+k); }
     while(st.length){ const i=st.pop(),k=i%GW; for(const j of [k>0?i-1:-1,k<GW-1?i+1:-1,i-GW,i+GW]) if(j>=0&&j<grid.length&&!grid[j]){ grid[j]=2; st.push(j); } }
