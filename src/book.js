@@ -15,7 +15,7 @@ const N = SHEETS.length, NI = N - 2;
 const HINGE = 0; // boards hinge at the spine edge of the block and overhang it by a square elsewhere
 export const G0 = 0.07; // pages start this far from the hinge axis, so a turning page's corners never enter either stack
 const REST = 0.01; // a sheet within this angle of flat lies on its stack
-const STRIP = 0.2, CROWN = 0.3, LINING = 0.07; // the spine strip stands this far off the block, is rounded this much when shut, and is this thick
+const STRIP = 0.2, CROWN = 0.3, LINING = 0.07, CLOTH = 0.012; // the spine strip stands this far off the block, is rounded this much when shut, and is this thick
 const LEAVES = 0.5; // the paper-edge texture repeats every this many cm
 const RUN = 0.42; // the thicker stack's top page reaches the crease in this much run per unit of height: steep, as card curves into a gutter
 const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -137,7 +137,7 @@ export class Book {
     }
     // the back of the block: every leaf's root rises out of the spine and bends over to its page, so seen from the head or tail the whole
     // section between the strip and the leaves is paper, and from above it is the top page curving down into the crease
-    const seg = this.rootSeg = 6, fan = this.rootFan = 8, M = (N - 1) * seg, count = (M + 1) * (2 + 2 * (fan + 1)), rp = new Float32Array(count * 3), ruv = new Float32Array(count * 2), ri = [];
+    const seg = this.rootSeg = 12, fan = this.rootFan = 12, M = (N - 1) * seg, count = (M + 1) * (2 + 2 * (fan + 1)), rp = new Float32Array(count * 3), ruv = new Float32Array(count * 2), ri = [];
     const cap = this.rootCap = (o, j, c) => (M + 1) * 2 + (o * (M + 1) + j) * (fan + 1) + c; // a leaf's edge from the spine (c = 0) to the end of its sheet (c = fan), at head (o = 0) or tail
     for (let j = 0; j < M; j++) { const a = j * 2; ri.push(a, a + 2, a + 1, a + 2, a + 3, a + 1); }
     for (const o of [0, 1]) for (let j = 0; j < M; j++) for (let c = 0; c < fan; c++) { const a = cap(o, j, c), b = a + fan + 1; ri.push(a, b, a + 1, b, b + 1, a + 1); }
@@ -277,22 +277,23 @@ export class Book {
       else { const w = (i - nj) / ns, h = 4 * w * (1 - w) * crown; line.push([Sb[0] + (Sf[0] - Sb[0]) * w + mx * h, Sb[1] + (Sf[1] - Sb[1]) * w + my * h]); }
     }
     const P = this.spine.geometry.attributes.position, ring = 2 * (n + 1), set = (i, x, y) => { y = Math.max(y, -BT); P.setXYZ(i * 2, x, y, BH / 2); P.setXYZ(i * 2 + 1, x, y, -BH / 2); }; // the desk stops it
-    const inner = []; for (let i = 0; i <= n; i++) { const [x, y] = line[i], k = LINING * sstep(0, 1, Math.min((i - nj) / 4, (n - nj - i) / 4)); set(i, x, y); set(ring - 1 - i, x - mx * k, y - my * k); inner.push([x - mx * k, Math.max(y - my * k, -BT)]); } // only the strip is lined, thinning to its ends: a joint is bare cloth
+    const inner = []; for (let i = 0; i <= n; i++) { const [x, y] = line[i], k = LINING * sstep(0, 1, Math.min((i - nj) / 4, (n - nj - i) / 4)), iy = Math.max(y - my * k, -BT + CLOTH); set(i, x, y); set(ring - 1 - i, x - mx * k, iy); inner.push([x - mx * k, iy]); } // the cloth has a thickness: its inside never lies in the desk's own plane// only the strip is lined, thinning to its ends: a joint is bare cloth
     P.needsUpdate = true; this.spine.geometry.computeVertexNormals(); this.spine.geometry.computeBoundingSphere();
     // the roots: from each sheet's spine end, just inside it and just under its face so paper meets paper, along a smooth curve to the next sheet's,
     // with the spine beneath; each leaf is rooted on the strip where it lies when the book is shut
     const cap = this.rootCap, Q = this.back.geometry.attributes.position, tone = this.back.geometry.attributes.color, seg = this.rootSeg, fan = this.rootFan, M = (N - 1) * seg, z = PH / 2 + 0.002;
     const tip = s => { const [x, y] = at(s, G0 + 0.02, s.isBoard ? 0 : s.top + (s.bot - s.top) * s.e); return [x, y - 0.004]; }, root = s => s.i === 0 ? n : s.i === N - 1 ? 0 : nj + ns * s.yR / this.W;
-    for (let i = 0; i < N - 1; i++) { const a = tip(S[i]), b = tip(S[i + 1]), ra = root(S[i]), rb = root(S[i + 1]), curve = sstep(0, 0.2, Math.abs(S[i].e - S[i + 1].e)); // straight down a stack's back, curved where a page leaves it
+    const parted = i => i >= 0 && i < N - 1 ? sstep(0, 0.2, Math.abs(S[i].e - S[i + 1].e)) : 0, kink = S.map((s, i) => Math.max(parted(i - 1), parted(i)));
+    for (let i = 0; i < N - 1; i++) { const a = tip(S[i]), b = tip(S[i + 1]), ra = root(S[i]), rb = root(S[i + 1]), curve = parted(i); // straight down a stack's back, curved where a page leaves it
       for (let m = 0; m <= seg; m++) { const t = m / seg, j = i * seg + m, x = a[0] + (b[0] - a[0]) * (t + curve * (3 * (1 - t) ** 2 * t * 0.45 + 3 * (1 - t) * t * t * 0.55 + t ** 3 - t)), y = a[1] + (b[1] - a[1]) * (t + curve * (t * t * (3 - 2 * t) - t));
-        const r = ra + (rb - ra) * t, r0 = Math.min(n - 1, Math.floor(r)), f = r - r0, ox = inner[r0][0] + (inner[r0 + 1][0] - inner[r0][0]) * f, oy = inner[r0][1] + (inner[r0 + 1][1] - inner[r0][1]) * f;
-        // paper darkens as it goes down into the crease, where the page beside it shades it
+        const r = ra + (rb - ra) * (t + curve * ((a[1] > b[1] ? t ** 3 : 1 - (1 - t) ** 3) - t)), r0 = Math.min(n - 1, Math.floor(r)), f = r - r0, ox = inner[r0][0] + (inner[r0 + 1][0] - inner[r0][0]) * f, oy = inner[r0][1] + (inner[r0 + 1][1] - inner[r0][1]) * f;
+        // on the steep side of the crease the roots run ahead of the page, so the leaves do not cross; paper darkens as it goes down into the crease, where the page beside it shades it
         const k = Math.min(1, Math.abs(a[1] - b[1]) / 0.5), low = a[1] > b[1] ? t * t : (1 - t) ** 2, g = 1 - 0.75 * curve * (k * low + (1 - k) * Math.sin(Math.PI * t));
         for (const e of [0, 1]) tone.setXYZ(j * 2 + e, g, g, g);
         Q.setXYZ(j * 2, x, y, PH / 2); Q.setXYZ(j * 2 + 1, x, y, -PH / 2);
         // a leaf leaves its stack level and stands up out of the spine, the bends nested inside each other; the leaves nearest the top page have no room to, and run straight
-        const bend = (1 - curve) * (1 - Math.min(1, Math.max(0, y / Math.max(1e-6, this.stackH[x < 0 ? 0 : 1]))) ** 2) ** 2, bx = (x + ox) / 2 + (ox - x) / 2 * bend, by = (y + oy) / 2 + (y - oy) / 2 * bend;
-        for (let c = 0; c <= fan; c++) { const v = c / fan, px = (1 - v) ** 2 * ox + 2 * v * (1 - v) * bx + v * v * x, py = (1 - v) ** 2 * oy + 2 * v * (1 - v) * by + v * v * y; Q.setXYZ(cap(0, j, c), px, py, z); Q.setXYZ(cap(1, j, c), px, py, -z); } } }
+        const bend = (1 - kink[i] - (kink[i + 1] - kink[i]) * t) * (1 - Math.min(1, Math.max(0, y / Math.max(1e-6, this.stackH[x < 0 ? 0 : 1]))) ** 2) ** 2, bx = (x + ox) / 2 + (ox - x) / 2 * bend, by = (y + oy) / 2 + (y - oy) / 2 * bend;
+        for (let c = 0; c <= fan; c++) { const v = c / fan, px = (1 - v) ** 2 * ox + 2 * v * (1 - v) * bx + v * v * x, py = (1 - v) ** 2 * oy + 2 * v * (1 - v) * by + v * v * y; Q.setXYZ(cap(0, j, c), px, py, z + j * 1e-4); Q.setXYZ(cap(1, j, c), px, py, -z - j * 1e-4); } } } // each leaf a hair proud of the last, so none shares a plane with its neighbour
     Q.needsUpdate = tone.needsUpdate = true; this.back.geometry.computeBoundingSphere();
   }
 }
