@@ -20,6 +20,7 @@ const EASE = 0.7, NECK = 0.34, BIND = 0.1; // how far a leaf runs on past its sh
 const LEAVES = 0.5; // the paper-edge texture repeats every this many cm
 const RUN = 0.42; // the thicker stack's top page reaches the crease in this much run per unit of height: steep, as card curves into a gutter
 const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const glide = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * t * (t * (6 * t - 15) + 10); }; // sstep with no jolt where it starts or stops
 const turnEase = t => t - Math.sin(2 * Math.PI * t) / (2 * Math.PI); // eases in and out of each turn
 const smin = (a, b, k = 0.07) => -k * Math.log(Math.exp(-a / k) + Math.exp(-b / k));
 // the strip's round and chord when its ends stand dy apart, of w when shut: pressed flat by the desk mid-book, its round comes back as it
@@ -200,8 +201,8 @@ export class Book {
   set(p, time = 0) {
     this.p = p; let L = 0, R = 0;
     for (const s of this.sheets) { s.t = Math.min(1, Math.max(0, p - s.i)); s.e = turnEase(s.t); L += s.e * s.addL; R += (1 - s.e) * s.addR; }
-    // the case lies flat on the desk while it is open: the strip flat between the boards, each stack on its board. Only when a board stands past
-    // upright does the strip stand with it, against the block; the block's leaves shear to follow, as they do in the hand
+    // the case lies flat on the desk while it is open: the strip flat between the boards, each stack on its board. Shut, the strip stands against the block.
+    // Between, it goes down with the opening of the cover from its first movement, and the leaves slide over one another with it, all together
     this.stackH = [L, R]; const S = this.sheets, D = this.D, u = L / (L + R), X = D / 2, low = Math.min(S[0].e, 1 - S[N - 1].e), c = Math.cos(Math.PI / 2 * low), sn = Math.sin(Math.PI / 2 * low);
     let w = D; for (let i = 0; i < 5; i++) w = stripShape(w * c, this.W)[1] + 0.04;
     const front = p < N / 2, Fx = front ? D * (1 - u) - w * sn : -D * u, Fy = front ? w * c : 0, Bx = front ? D * (1 - u) : -D * u + w * sn, By = front ? 0 : w * c;
@@ -218,7 +219,7 @@ export class Book {
       const [xr, yr] = onRight(s.yR), [xl, yl] = onLeft(s.yL);
       // the spine end only ever moves away from the stack the page is over: it rises while the page is still over the
       // right-hand stack, and comes down only once the page is over the left-hand one
-      const slide = yl > yr ? sstep(0.02, 0.5, s.e) : sstep(0.5, 0.98, s.e);
+      const slide = yl > yr ? glide(0.02, 0.5, s.e) : glide(0.5, 0.98, s.e);
       if (s.isBoard) s.pivot.position.set(s.i ? Bx : Fx, s.i ? By : Fy, 0); else s.pivot.position.set(xr + (xl - xr) * slide, yr + (yl - yr) * slide, 0);
       s.pivot.rotation.z = s.theta;
       const rest = Math.PI * s.e <= REST || Math.PI * (1 - s.e) <= REST;

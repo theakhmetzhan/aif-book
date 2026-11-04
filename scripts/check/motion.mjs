@@ -29,16 +29,16 @@ const r=await p.evaluate(()=>{
   const runs=moves.map(([a,c])=>run(a,c)), table=runs.map(judge);
   // the same shifts against p itself, so a threshold shows wherever the spring happens to carry it: a kink is a jump in speed, a step a jump in acceleration
   const dp=1/2048, n=N/dp, d=leaves.map(()=>new Float64Array(n+1)), turn=new Uint8Array(n+1); for(let i=0;i<=n;i++){ const q=i*dp; pose(q); leaves.forEach((k,j)=>d[j][i]=shift(S[k],q)); }
-  let kink=0,kinkAt=-1,kinkOf=-1,step=0,stepAt=-1,stepOf=-1; const spots=[];
-  d.forEach((a,j)=>{ const k=leaves[j]; for(let i=2;i<n-1;i++){ const q=i*dp; if(q>k-2*dp&&q<k+1+2*dp) continue; // its own turn is a swing, judged as a swing
+  let kink=0,kinkAt=-1,kinkOf=-1,step=0,stepAt=-1,stepOf=-1,ownStep=0,ownStepAt=-1; const spots=[];
+  d.forEach((a,j)=>{ const k=leaves[j]; for(let i=2;i<n-1;i++){ const q=i*dp; if(q>k-2*dp&&q<k+1+2*dp){ const s=Math.abs(a[i+2]-3*a[i+1]+3*a[i]-a[i-1])/dp/dp; if(s>ownStep){ ownStep=s; ownStepAt=q; } continue; } // a leaf's own turn: its spine end crosses from stack to stack
     const v=Math.abs(a[i+1]-2*a[i]+a[i-1])/dp, s=Math.abs(a[i+2]-3*a[i+1]+3*a[i]-a[i-1])/dp/dp; if(v>kink){ kink=v; kinkAt=q; kinkOf=k; } if(s>step){ step=s; stepAt=q; stepOf=k; } if(s>8) spots.push([+q.toFixed(3),k,+s.toFixed(1)]); } });
-  return {table,kink,kinkAt,kinkOf,step,stepAt,stepOf,spots,runs:runs.filter(m=>['0>1','1>0','3>4','7>8'].includes(`${m.from}>${m.to}`))};
+  return {table,kink,kinkAt,kinkOf,step,stepAt,stepOf,ownStep,ownStepAt,spots,runs:runs.filter(m=>['0>1','1>0','3>4','7>8'].includes(`${m.from}>${m.to}`))};
 });
 const {runs,spots,...out}=r; const worst=k=>Math.max(...r.table.map(a=>a[k]));
 if(process.argv[2]) fs.writeFileSync(process.argv[2],JSON.stringify({runs,spots,table:r.table,kink:r.kink,kinkAt:r.kinkAt,step:r.step,stepAt:r.stepAt}));
 console.log(r.table.map(a=>`${a.name}\tframes ${a.frames}\tmoved ${a.moved}\tlag ${a.lag.toFixed(3)} cm at ${a.lagAt}\tapart ${a.apart.toFixed(3)}\tback ${a.back.toFixed(4)}\tstep ${a.step.toFixed(4)}`).join('\n'));
-console.log(JSON.stringify({kink:out.kink,kinkAt:out.kinkAt,kinkOf:out.kinkOf,step:out.step,stepAt:out.stepAt,stepOf:out.stepOf}));
+console.log(JSON.stringify({kink:out.kink,kinkAt:out.kinkAt,kinkOf:out.kinkOf,step:out.step,stepAt:out.stepAt,stepOf:out.stepOf,ownStep:out.ownStep,ownStepAt:out.ownStepAt}));
 const fails=[]; const need=(c,m)=>{ if(!c) fails.push(m); };
 need(worst('lag')<0.05,'the slope does not grow with the opening'); need(worst('apart')<0.05,'the leaves do not move together'); need(worst('back')<0.025,'a leaf goes past where it ends and comes back');
-need(r.kink<0.5,'a leaf changes speed at a threshold'); need(r.step<8,'a leaf changes acceleration at a threshold');
+need(r.kink<0.5,'a leaf changes speed at a threshold'); need(r.step<8&&r.ownStep<8,'a leaf changes acceleration at a threshold');
 console.log('errors',errs); console.log(fails.length?'FAIL: '+fails.join('; '):'PASS'); await b.close(); process.exit(fails.length||errs.length?1:0);
