@@ -1,4 +1,4 @@
-// The physical book: a case of two cloth boards and a rigid spine strip joined by flexible joints, stiff card pages bound to the
+// The physical book: a case of two cloth boards and a stiff spine strip joined by flexible joints, stiff card pages bound to the
 // back of the block, and the pop-ups glued to the pages. The two stacks meet at the gutter, and the case rocks under them as pages
 // cross: whichever stack is thinner rides up to the gutter on a board sloping down to the desk. Each spread's pop-ups fold with
 // the angle between its two pages and are kept inside their half of the wedge between those pages, so paper never passes through paper.
@@ -135,7 +135,7 @@ export class Book {
     this.back = new THREE.Mesh(new THREE.PlaneGeometry(1, PH, this.backSeg, 1), new THREE.MeshStandardMaterial({ color: T.endpaper[0], roughness: 0.95, side: THREE.DoubleSide }));
     this.back.castShadow = this.back.receiveShadow = true; this.back.frustumCulled = false; this.group.add(this.back);
     this.events = {}; // events.sheet({ type: 'lift' | 'land', sheet, board }) as a sheet leaves or reaches a stack
-    // the cloth of the spine: a rigid strip between the boards, the joints either side of it flexing as they swing
+    // the cloth of the spine: a stiff strip between the boards, the joints either side of it flexing as they swing
     const sc = document.createElement('canvas'); sc.width = 1024; sc.height = 256; clothFill(sc.getContext('2d'), 1024, 256, T.cloth);
     const sg = sc.getContext('2d'); sg.save(); sg.translate(512, 128); sg.fillStyle = goldGradient(sg, -300, 0, 300, 0); sg.font = '700 74px "Playfair Display", serif'; sg.textAlign = 'center'; sg.textBaseline = 'middle'; sg.letterSpacing = '14px'; sg.fillText('EVIDENCE', 0, 4); sg.restore();
     const spineTex = new THREE.CanvasTexture(sc); spineTex.colorSpace = THREE.SRGBColorSpace;
@@ -245,8 +245,10 @@ export class Book {
     const at = (s, lx, ly) => { const c = Math.cos(s.theta), sn = Math.sin(s.theta), q = s.pivot.position; return [q.x + lx * c - ly * sn, q.y + lx * sn + ly * c]; };
     const n = this.spineSeg, nj = 5, ns = n - 2 * nj, F = at(cov, 0, 0), B = at(bk, 0, 0), Cf = at(cov, 0, cov.top), Cb = at(bk, 0, bk.bot);
     const len = Math.hypot(F[0] - B[0], F[1] - B[1]), tx = (F[0] - B[0]) / len, ty = (F[1] - B[1]) / len, mx = -ty, my = tx; // along the strip, back to front, and outward
-    const end = (Q, dir) => [Q[0] + mx * STRIP + tx * dir * 0.02, Q[1] + my * STRIP + ty * dir * 0.02], Sb = end(B, 1), Sf = end(F, -1);
     const crown = CROWN * Math.abs(F[1] - B[1]) / this.W; // pressed flat by the desk mid-book, its round comes back as it stands up
+    // it keeps its length: what the round gives back widens it, and the joints take that up
+    const c0 = this.W - 0.04, arc = c0 + 8 * CROWN * CROWN / (3 * c0), chord = (arc + Math.sqrt(arc * arc - 32 * crown * crown / 3)) / 2;
+    const end = dir => [(F[0] + B[0] - tx * dir * chord) / 2 + mx * STRIP, (F[1] + B[1] - ty * dir * chord) / 2 + my * STRIP], Sb = end(1), Sf = end(-1);
     // a joint: cloth leaving the board along its face and arriving along the strip, so it rolls open and creases as the board swings
     const joint = (C, s, Sx, dir, t) => {
       const k = 0.25 * Math.hypot(Sx[0] - C[0], Sx[1] - C[1]), c = Math.cos(s.theta), sn = Math.sin(s.theta), a = (1 - t) ** 3, b = 3 * (1 - t) ** 2 * t, e = 3 * (1 - t) * t * t, f = t ** 3;

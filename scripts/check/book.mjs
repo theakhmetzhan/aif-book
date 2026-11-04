@@ -10,7 +10,7 @@ const r=await p.evaluate(()=>{
   const at=(s,x,y)=>{const c=Math.cos(s.theta),n=Math.sin(s.theta),q=s.pivot.position;return [q.x+x*c-y*n,q.y+x*n+y*c];};
   let prev=null; const phi={}, fold=f=>Math.PI/2-Math.abs(f.pieces[0].fold.rotation.x);
   for(let i=0;i<=N/dp;i++){ const q=+(i*dp).toFixed(4); B.set(q,0); B.group.updateMatrixWorld(true);
-    const F=S[0].pivot.position,K=S[N-1].pivot.position,l=Math.hypot(F.x-K.x,F.y-K.y); out.strip=[Math.min(out.strip[0],l),Math.max(out.strip[1],l)];
+    const F=S[0].pivot.position,K=S[N-1].pivot.position, sp=B.spine.geometry.attributes.position; let l=0; for(let v=5;v<B.spineSeg-5;v++) l+=Math.hypot(sp.getX(v*2+2)-sp.getX(v*2),sp.getY(v*2+2)-sp.getY(v*2)); out.strip=[Math.min(out.strip[0],l),Math.max(out.strip[1],l)]; // along the strip itself, without its joints
     // the case rests on the desk: nothing of it or the block goes below the boards' outer faces lying flat
     for(const s of S) for(const x of [0,s.isBoard?14.3:14.07]) for(const y of [s.top,s.bot]) out.desk=Math.min(out.desk,at(s,x,y)[1]+BT);
     const P=B.spine.geometry.attributes.position; for(let v=0;v<P.count;v++) out.desk=Math.min(out.desk,P.getY(v)+BT);
@@ -32,7 +32,7 @@ const r=await p.evaluate(()=>{
   return out;
 });
 const fails=[]; const need=(c,m)=>{ if(!c) fails.push(m); };
-need(r.strip[1]-r.strip[0]<0.05,'the strip changes length'); need(r.desk>-0.005,'something goes through the desk'); need(r.spineInBlock===0,'the spine enters the block');
+need(r.strip[1]-r.strip[0]<0.02,'the strip changes length'); need(r.desk>-0.005,'something goes through the desk'); need(r.spineInBlock===0,'the spine enters the block');
 need(r.thickness[1]-r.thickness[0]<1e-4&&r.fillOnTurningPage===0&&r.fillJump<0.05,'a page changes thickness'); need(r.gutterStep<0.02,'a step at the gutter'); need(r.backGap<1e-4,'the block leaves the case');
 need(r.poseJump<0.05,'a sheet jumps'); need(r.angleJump<0.05,'a sheet snaps round'); need(r.phiReversals===0,'a pop-up reverses'); need(r.phiStep<0.1,'a pop-up snaps');
 console.log(JSON.stringify(r,null,1)); console.log('errors',errs); console.log(fails.length?'FAIL: '+fails.join('; '):'PASS'); await b.close(); process.exit(fails.length||errs.length?1:0);
