@@ -57,22 +57,22 @@ async function start() {
   room.pickables.push(book.group);
 
   // ---------- camera ----------
-  const cam = new THREE.PerspectiveCamera(+(qs.get('fov') || 38), 1, 2, 900);
+  const cam = new THREE.PerspectiveCamera(+(qs.get('fov') || 38), canvas.clientWidth / canvas.clientHeight, 2, 900);
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
-  const pickAt = (x, y, objs) => { ndc.set(x / innerWidth * 2 - 1, -(y / innerHeight) * 2 + 1); ray.setFromCamera(ndc, cam); return ray.intersectObjects(objs, true)[0] || null; };
+  const pickAt = (x, y, objs) => { ndc.set(x / canvas.clientWidth * 2 - 1, -(y / canvas.clientHeight) * 2 + 1); ray.setFromCamera(ndc, cam); return ray.intersectObjects(objs, true)[0] || null; };
   const rig = new CameraRig(cam, canvas, { pick: (x, y) => pickAt(x, y, room.pickables)?.point || null, limits: { rMax: 500 } }); // far enough for a phone to fit the whole board
   const home = () => {
-    const a = innerWidth / innerHeight;
+    const a = cam.aspect;
     if (a < 0.8) return { target: new THREE.Vector3(0, 6, -3), r: 50 / Math.max(0.42, a), th: 0, ph: 1.24 };
     return { target: new THREE.Vector3(0, 10.5, -9), r: Math.max(78, 120 / a), th: -0.2, ph: 1.36 }; // a little from the left: the lamp's side
   };
   const hq = qs.get('home')?.split(',').map(Number);
   let userMoved = false, view = 'desk';
   // fit a box of half-width hw and half-height hh (as seen from the camera) inside the view, leaving room for the HUD
-  const fitR = (hw, hh) => { const t = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)), a = innerWidth / innerHeight; return Math.max(hw / (t * a), hh / t) * 1.12; };
+  const fitR = (hw, hh) => { const t = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)), a = cam.aspect; return Math.max(hw / (t * a), hh / t) * 1.12; };
   const views = {
     desk: home,
-    book: () => { const ri = Math.round(target), shut = ri === 0 || ri === N, a = innerWidth / innerHeight;
+    book: () => { const ri = Math.round(target), shut = ri === 0 || ri === N, a = cam.aspect;
       const hw = shut ? 8.6 : a < 0.8 ? 8.4 : 16.2; const tx = !shut && a < 0.8 ? (ri === 1 ? 7.2 : -7.2) : 0; // a phone reads one page at a time: the text page
       return { target: new THREE.Vector3(tx, DESK_Y + 2.2, 1.2), r: fitR(hw, 12.5), th: 0, ph: 0.6 }; },
     // the whole setup: the board and the desk in front of it, straight on from a step back, eyes a little above the desk
@@ -102,12 +102,15 @@ async function start() {
   });
   composer.addPass(film);
 
+  // the picture takes its size from the canvas's own box, checked before every frame, so the two always match: on a phone the window's height moves with the address bar
+  let boxW, boxH;
   const resize = () => {
-    renderer.setPixelRatio(dpr); renderer.setSize(innerWidth, innerHeight, false); composer.setPixelRatio(dpr); composer.setSize(innerWidth, innerHeight);
-    bloom.resolution.set(innerWidth / 2, innerHeight / 2);
-    cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); film.uniforms.uAspect.value = cam.aspect;
+    boxW = canvas.clientWidth; boxH = canvas.clientHeight;
+    renderer.setPixelRatio(dpr); renderer.setSize(boxW, boxH, false); composer.setPixelRatio(dpr); composer.setSize(boxW, boxH);
+    bloom.resolution.set(boxW / 2, boxH / 2);
+    cam.aspect = boxW / boxH; cam.updateProjectionMatrix(); film.uniforms.uAspect.value = cam.aspect;
   };
-  resize(); addEventListener('resize', () => { resize(); if (!userMoved && !qs.get('cam')) view === 'desk' ? goHome(true) : goView(view, true); });
+  resize();
 
   // ---------- pages ----------
   let p = +(qs.get('p') ?? 0), target = Math.round(p), pv = 0, hover = 0, hoverK = 0;
@@ -160,7 +163,7 @@ async function start() {
     else if (e.key === 'Home') goto(0); else if (e.key === 'End') goto(N);
     else if (e.key === 'h' || e.key === 'H' || e.key === 'Escape') goHome(false);
     else if (e.key === 'r' || e.key === 'R') goView('book'); else if (e.key === 'o' || e.key === 'O') goView('room');
-    else if (e.key === '+' || e.key === '=') { rig.zoom(0.8, innerWidth / 2, innerHeight / 2); userMoved = true; }
+    else if (e.key === '+' || e.key === '=') { rig.zoom(0.8, boxW / 2, boxH / 2); userMoved = true; }
     else if (e.key === '-' || e.key === '_') { rig.zoom(1.25); userMoved = true; }
     else if (e.key === 'm' || e.key === 'M') setSound(sndB.getAttribute('aria-pressed') !== 'true');
     else if (e.key === 'ArrowUp') { e.preventDefault(); rig.g.ph -= 0.12; rig.limit(); userMoved = true; } else if (e.key === 'ArrowDown') { e.preventDefault(); rig.g.ph += 0.12; rig.limit(); userMoved = true; }
@@ -172,6 +175,7 @@ async function start() {
   const freeze = !!qs.get('freeze'), tFix = qs.get('t') ? +qs.get('t') : null; room.freeze = freeze;
   if (freeze) { p = target = +(qs.get('p') ?? 0); }
   function frame() {
+    if (canvas.clientWidth !== boxW || canvas.clientHeight !== boxH) { resize(); if (!userMoved && !qs.get('cam')) view === 'desk' ? goHome(true) : goView(view, true); }
     clock.update(); const dt = Math.min(0.05, clock.getDelta()), el = tFix ?? (reduced ? 4 : clock.getElapsed());
     // page spring: critically damped, capped speed for long jumps
     if (!freeze) {
@@ -197,7 +201,7 @@ async function start() {
     first = false;
     requestAnimationFrame(frame);
   }
-  window.__book = { cam, rig, renderer, scene, book, room, set: pp => { target = p = pp; pv = 0; }, get p() { return p; } };
+  window.__book = { audio, cam, rig, renderer, scene, book, room, set: pp => { target = p = pp; pv = 0; }, get p() { return p; } };
   document.body.classList.add('ready');
   requestAnimationFrame(frame);
 }

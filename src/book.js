@@ -152,7 +152,7 @@ export class Book {
     this.back = new THREE.Mesh(rg, [new THREE.MeshStandardMaterial({ color: new THREE.Color(T.paper).multiplyScalar(0.9), vertexColors: true, roughness: 0.9, side: THREE.DoubleSide, envMapIntensity: 0.15 }), hidden]);
     // the crease takes the shadows the page beside it takes; the block's ends do not: a shadow's edge grazing them breaks into bands
     const blockEnds = new THREE.Mesh(rg, [hidden, edgeMat]); this.back.castShadow = blockEnds.castShadow = true; this.back.receiveShadow = true; this.back.frustumCulled = blockEnds.frustumCulled = false; this.group.add(this.back, blockEnds);
-    this.events = {}; // events.sheet({ type: 'lift' | 'land', sheet, board }) as a sheet leaves or reaches a stack
+    this.events = {}; // events.sheet({ type: 'lift' | 'land', sheet }) as a sheet leaves or reaches a stack
     // the cloth of the spine: a stiff strip between the boards, the joints either side of it flexing as they swing
     const sc = document.createElement('canvas'); sc.width = 1024; sc.height = 256; clothFill(sc.getContext('2d'), 1024, 256, T.cloth);
     const sg = sc.getContext('2d'); sg.save(); sg.translate(512, 128); sg.fillStyle = goldGradient(sg, -300, 0, 300, 0); sg.font = '700 74px "Playfair Display", serif'; sg.textAlign = 'center'; sg.textBaseline = 'middle'; sg.letterSpacing = '14px'; sg.fillText('EVIDENCE', 0, 4); sg.restore();
@@ -223,7 +223,7 @@ export class Book {
       if (s.isBoard) s.pivot.position.set(s.i ? Bx : Fx, s.i ? By : Fy, 0); else s.pivot.position.set(xr + (xl - xr) * slide, yr + (yl - yr) * slide, 0);
       s.pivot.rotation.z = s.theta;
       const rest = Math.PI * s.e <= REST || Math.PI * (1 - s.e) <= REST;
-      if (s.rest !== undefined && s.rest !== rest) this.events.sheet?.({ type: s.rest ? 'lift' : 'land', sheet: s.i, board: s.isBoard });
+      if (s.rest !== undefined && s.rest !== rest) this.events.sheet?.({ type: s.rest ? 'lift' : 'land', sheet: s.i });
       s.rest = rest;
     }
     // pop-ups
