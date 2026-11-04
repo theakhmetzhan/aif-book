@@ -547,7 +547,7 @@ function lights(scene, renderer, mobile, out) {
   ticks.push(t => {
     if (!strike && t > next && !out.freeze) { strike = { t0: t, k: 0.6 + Math.random() * 0.7 }; next = t + 50 + Math.random() * 70; out.events.lightning?.(1 + Math.random() * 5); }
     let f = 0; if (strike) { const u = t - strike.t0; f = (Math.exp(-((u - 0.05) ** 2) / 0.002) + 0.6 * Math.exp(-((u - 0.28) ** 2) / 0.004) + 0.35 * Math.exp(-((u - 0.5) ** 2) / 0.01)) * strike.k; if (u > 1.2) strike = null; }
-    if (f > 0) { if (!flash.intensity) renderer.shadowMap.needsUpdate = true; flash.shadow.needsUpdate = true; } // the first frame can't wait for main's shadow tick
+    if (f > 0 && (!mobile || !flash.intensity)) { if (!flash.intensity) renderer.shadowMap.needsUpdate = true; flash.shadow.needsUpdate = true; } // the first frame can't wait for main's shadow tick. On a phone it is the only one: nothing moves in a flash
     win.intensity = baseWin * (1 + f * 7); win.color.setRGB(0.56 + f * 0.3, 0.65 + f * 0.25, 0.84 + f * 0.1); flash.intensity = f * 0.9;
   });
   out.lampObj?.userData.setGlow?.(1);
@@ -634,7 +634,7 @@ function rainGobo(renderer, mobile, out, win) {
   };
   function startRun(d) { d.dead = true; runs.push({ x: d.x, y: d.y, rad: d.rad, seed: d.seed, moving: false, t: r() * 0.8, vx: 0, trav: 0, next: 6, sx: d.x, sy: d.y }); }
   const step = dt => {
-    grid.clear(); for (const d of drops) if (!d.gone) put(d);
+    for (const a of grid.values()) a.length = 0; for (const d of drops) if (!d.gone) put(d);
     // rain landing on the pane: mostly fine droplets; drops that grow heavy, and now and then a fat one, start to run
     for (let n = Math.floor(dt * 120 + r()); n > 0; n--) { const d = land(r() * P, r() * P, 1.7 + Math.pow(r(), 2.6) * 3.4); if (d.rad > 5.4 && runs.length < 12) startRun(d); }
     if (r() < dt * 0.4 && runs.length < 12) startRun(land(r() * P, P * (0.3 + 0.75 * r()), 5.6 + r() * 1.8));
@@ -654,7 +654,7 @@ function rainGobo(renderer, mobile, out, win) {
       if (q.y < -12) runs.splice(i, 1);
     }
     for (let i = streaks.length - 1; i >= 0; i--) { streaks[i].age += dt; if (streaks[i].age > 14) streaks.splice(i, 1); }
-    drops = drops.filter(d => !d.dead && !(d.gone && d.a <= 0));
+    let kept = 0; for (const d of drops) if (!d.dead && !(d.gone && d.a <= 0)) drops[kept++] = d; drops.length = kept;
     let live = 0; for (const d of drops) if (!d.gone) live++;
     for (let i = 0; live > LIVE && i < drops.length; i++) if (!drops[i].gone) { drops[i].gone = 1.2; live--; } // the pane holds only so much: the oldest droplets dry off
     if (drops.length > MAXD) drops.splice(0, drops.length - MAXD); // the buffer's hard limit, past anything the fades should reach
@@ -665,9 +665,10 @@ function rainGobo(renderer, mobile, out, win) {
 
   const write = () => {
     let n = 0; const D = aD.array, K = aK.array, u = 1 / P;
-    for (const s of streaks) { const k = Math.exp(-s.age / 5); if (k < 0.03) continue; D.set([(s.x0 + s.x1) / 2 * u, (s.y0 + s.y1) / 2 * u, s.w * u, Math.max(0.5, Math.abs(s.y0 - s.y1) / 2 + 1) * u], n * 4); K.set([1, k, 0, 0], n * 4); n++; }
-    for (const d of drops) { const k = d.gone ? 0.5 + 0.5 * d.a : 1; D.set([d.x * u, d.y * u, d.rad * k * d.ax * u, d.rad * k / d.ax * u], n * 4); K.set([0, d.a, d.seed, 0], n * 4); n++; } // shrinking as it leaves
-    for (const q of runs) { const st = q.moving ? 1.22 : 1.08; D.set([q.x * u, q.y * u, q.rad / Math.sqrt(st) * u, q.rad * st * u], n * 4); K.set([0, 1, q.seed, 0], n * 4); n++; }
+    const put = (x, y, w, h, kind, a, seed) => { const i = n++ * 4; D[i] = x; D[i + 1] = y; D[i + 2] = w; D[i + 3] = h; K[i] = kind; K[i + 1] = a; K[i + 2] = seed; }; // nothing new per drop: thirty times a second, that much garbage stops a phone now and then
+    for (const s of streaks) { const k = Math.exp(-s.age / 5); if (k < 0.03) continue; put((s.x0 + s.x1) / 2 * u, (s.y0 + s.y1) / 2 * u, s.w * u, Math.max(0.5, Math.abs(s.y0 - s.y1) / 2 + 1) * u, 1, k, 0); }
+    for (const d of drops) { const k = d.gone ? 0.5 + 0.5 * d.a : 1; put(d.x * u, d.y * u, d.rad * k * d.ax * u, d.rad * k / d.ax * u, 0, d.a, d.seed); } // shrinking as it leaves
+    for (const q of runs) { const st = q.moving ? 1.22 : 1.08; put(q.x * u, q.y * u, q.rad / Math.sqrt(st) * u, q.rad * st * u, 0, 1, q.seed); }
     geo.instanceCount = n; aD.needsUpdate = aK.needsUpdate = true;
     const prev = renderer.getRenderTarget(), sm = renderer.shadowMap.needsUpdate;
     renderer.setRenderTarget(rt); renderer.render(gs, gc); renderer.setRenderTarget(prev); renderer.shadowMap.needsUpdate = sm;
@@ -676,7 +677,7 @@ function rainGobo(renderer, mobile, out, win) {
   return {
     texture: rt.texture, glass: GLASS, rt, stats: () => ({ drops: drops.length, runs: runs.length, streaks: streaks.length }),
     update(t, dt) {
-      acc += dt; if (acc < 1 / 30) return;
+      acc += dt; if (acc < (out.rainStep ?? 1 / 30)) return;
       if (!out.freeze) step(Math.min(0.1, acc)); acc = 0;
       write();
     },
