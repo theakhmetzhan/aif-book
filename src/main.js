@@ -75,8 +75,8 @@ async function start() {
       return hq ? { ...h, r: hq[0], ph: hq[1], target: new THREE.Vector3(0, hq[2], hq[3]) } : h; },
     // the whole setup: the board and the desk in front of it, straight on from a step back, eyes a little above the desk
     room: () => ({ target: new THREE.Vector3(0, 26, -4), r: fitR(BOARD.w / 2 + 4, 67), th: 0, ph: 1.49, fov: FOV }),
-    // the board square on: a wide lens from close in leaves the lamp and the rest of the desk below the frame, and a flat board keeps its shape through any lens
-    board: () => ({ target: new THREE.Vector3(0, BOARD.y0 + BOARD.h / 2, BOARD.z + 1), r: fitR(BOARD.w / 2 + 2, BOARD.h / 2 + 2, 60), th: 0, ph: Math.PI / 2, fov: 60, floor: 1 }),
+    // the board square on: a wide lens from close in leaves the lamp and the rest of the desk below the frame, and a flat board keeps its shape through any lens. A little high, to clear the envelope at its foot
+    board: () => ({ target: new THREE.Vector3(0, BOARD.y0 + BOARD.h / 2 + 1, BOARD.z + 1), r: fitR(BOARD.w / 2 + 2, BOARD.h / 2 + 2, 60), th: 0, ph: Math.PI / 2, fov: 60, floor: 1 }),
     book: () => { const hw = shut() ? 8.6 : onePage() ? 8.4 : 16.2, tx = onePage() ? (side || (Math.round(target) === 1 ? 1 : -1)) * PAGE : 0; // to begin with, the text page
       return { target: new THREE.Vector3(tx, DESK_Y + 2.2, 1.2), r: fitR(hw, 12.5), th: 0, ph: 0.6, fov: FOV }; },
     // eyes level with the lower of the two open pages, so both are edge-on and only what stands on them shows, on a longer lens so the near pieces don't loom. Shut, the book is what there is to watch, so the eyes rise just enough to see its cover
