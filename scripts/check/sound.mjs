@@ -11,7 +11,7 @@ await pg.goto(url + 'audio/CREDITS.md');
 const r = await pg.evaluate(async base => {
   const { Ambience } = await import(base + 'src/audio.js'), { CameraRig } = await import(base + 'src/controls.js');
   const T3 = await import((await (await fetch(base + 'src/controls.js')).text()).match(/from\s+"([^"]*three[^"]*)"/)[1]);
-  const SR = 44100, V = (x, y, z) => new T3.Vector3(x, y, z), pos = { clock: V(52, 5.8, -32), book: V(0, 2, 0) }, HOME = { target: V(0, 10.5, -9), r: 78, th: -0.2, ph: 1.36 };
+  const SR = 44100, V = (x, y, z) => new T3.Vector3(x, y, z), pos = { clock: V(31.9, 6.4, -34.5), book: V(0, 2, 0) }, HOME = { target: V(0, 10.5, -9), r: 78, th: -0.2, ph: 1.36 };
   // wheel hard into the clock, hold, whip round it, wheel out past the room, whip round, wheel into the book, hold, cut straight home
   const FLIGHT = [
     [4.0, 4.6, g => { g.at = pos.clock; g.zoom(0.825, 0, 0); }],
