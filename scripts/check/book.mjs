@@ -23,7 +23,7 @@ const r=await p.evaluate(()=>{
     let n=0; for(let i=0;i<grid.length;i++) if(!grid[i]) n++; return n*C*C; };
   let prev=null, prevSpine=null; const phi={}, fold=f=>Math.PI/2-Math.abs(f.pieces[0].fold.rotation.x);
   for(let i=0;i<=N/dp;i++){ const q=+(i*dp).toFixed(4); B.set(q,0); B.group.updateMatrixWorld(true);
-    const F=S[0].pivot.position,K=S[N-1].pivot.position, sp=B.spine.geometry.attributes.position; let l=0; for(let v=5;v<B.spineSeg-5;v++) l+=Math.hypot(sp.getX(v*2+2)-sp.getX(v*2),sp.getY(v*2+2)-sp.getY(v*2)); out.strip=[Math.min(out.strip[0],l),Math.max(out.strip[1],l)]; // along the strip itself, without its joints
+    const F=S[0].pivot.position,K=S[N-1].pivot.position, sp=B.spine.geometry.attributes.position; let l=0; for(let v=B.jointSeg;v<B.spineSeg-B.jointSeg;v++) l+=Math.hypot(sp.getX(v*2+2)-sp.getX(v*2),sp.getY(v*2+2)-sp.getY(v*2)); out.strip=[Math.min(out.strip[0],l),Math.max(out.strip[1],l)]; // along the strip itself, without its joints
     // the case rests on the desk: nothing of it or the block goes below the boards' outer faces lying flat
     for(const s of S) for(const x of [0,s.isBoard?14.3:14.07]) for(const y of [s.top,s.bot]) out.desk=Math.min(out.desk,at(s,x,y)[1]+BT);
     const P=B.spine.geometry.attributes.position; for(let v=0;v<P.count;v++) out.desk=Math.min(out.desk,P.getY(v)+BT);
