@@ -47,6 +47,7 @@ for (const [name, type, opts] of [['WebKit', webkit, {}], ['Chromium', chromium,
     for (const h of hud) need(h.tag === 'BUTTON' && h.tab === 0 && !h.border && /rgba\(0, 0, 0, 0\)|transparent/.test(h.bg) && h.shadow === 'none' && h.blur === 'none' && /Caveat/.test(h.font), `${tag}: ${h.t} is not bare: ${JSON.stringify(h)}`);
     for (const h of hud) need(h.w >= 44 && h.h >= 44, `${tag}: ${h.t} is ${h.w}x${h.h}`);
     need(await p.evaluate(() => document.fonts.check('25px Caveat', 'Read')), `${tag}: Caveat not loaded`);
+    await p.waitForTimeout(300); // the colour eases
     const on = await p.evaluate(() => { const a = getComputedStyle(document.querySelector('.views button[aria-pressed=true]')), b = getComputedStyle(document.querySelector('.views button[aria-pressed=false]')); return { line: a.textDecorationLine, off: b.textDecorationLine, same: a.color === b.color }; });
     need(on.line === 'underline' && on.off === 'none' && !on.same, `${tag}: the active view does not stand out: ${JSON.stringify(on)}`);
     if (!phone) { const tab = name === 'WebKit' ? 'Alt+Tab' : 'Tab'; await p.mouse.click(5, 5); await p.keyboard.press(tab); await p.keyboard.press(tab); const f = await p.evaluate(() => { const a = document.activeElement, s = getComputedStyle(a); return { t: a.tagName, o: s.outlineStyle, w: parseFloat(s.outlineWidth) }; }); need(f.t === 'BUTTON' && f.o === 'solid' && f.w >= 2, `${tag}: focus shows ${JSON.stringify(f)}`); }
