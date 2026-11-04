@@ -1,7 +1,8 @@
-// The physical book: a case of two cloth boards and a stiff spine strip joined by flexible joints, stiff card pages bound to the
-// back of the block, and the pop-ups glued to the pages. The two stacks meet at the gutter, and the case rocks under them as pages
-// cross: whichever stack is thinner rides up to the gutter on a board sloping down to the desk. Each spread's pop-ups fold with
-// the angle between its two pages and are kept inside their half of the wedge between those pages, so paper never passes through paper.
+// The physical book: a case of two cloth boards and a stiff spine strip joined by flexible joints, stiff card pages whose roots rise out
+// of the spine in a fan, and the pop-ups glued to the pages. Open, the case lies flat on the desk and stays put: the two stacks sit on
+// their boards, the crease between the top pages crosses the strip as pages turn, and the thicker stack's top page curves down to it.
+// Each spread's pop-ups fold with the angle between its two pages and are kept inside their half of the wedge between those pages,
+// so paper never passes through paper.
 import * as THREE from 'three';
 import { FACES, SHEETS } from './pages.js';
 import { BUILDERS, setPieceFold, CARD } from './popups.js';
@@ -15,6 +16,8 @@ const HINGE = 0; // boards hinge at the spine edge of the block and overhang it 
 export const G0 = 0.07; // pages start this far from the hinge axis, so a turning page's corners never enter either stack
 const REST = 0.01; // a sheet within this angle of flat lies on its stack
 const STRIP = 0.2, CROWN = 0.3, LINING = 0.07; // the spine strip stands this far off the block, is rounded this much when shut, and is this thick
+const LEAVES = 0.5; // the paper-edge texture repeats every this many cm
+const RUN = 0.42; // the thicker stack's top page reaches the crease in this much run per unit of height: steep, as card curves into a gutter
 const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const turnEase = t => t - Math.sin(2 * Math.PI * t) / (2 * Math.PI); // eases in and out of each turn
 const smin = (a, b, k = 0.07) => -k * Math.log(Math.exp(-a / k) + Math.exp(-b / k));
@@ -47,7 +50,12 @@ export class Book {
     this.group = new THREE.Group(); scene.add(this.group);
     this.sheets = []; this.faces = [];
     const hidden = new THREE.MeshBasicMaterial({ visible: false });
-    const edgeMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(T.paper).multiplyScalar(0.86), roughness: 0.95 });
+    // seen from its end the block is paper edges, fine and uneven, one period every LEAVES cm; leaves, folded card and the fan of roots all share them
+    const lc = document.createElement('canvas'); lc.width = 4; lc.height = 256; const lg = lc.getContext('2d'); let seed = 7; const rnd = () => (seed = seed * 16807 % 2147483647) / 2147483647;
+    lg.fillStyle = '#fff'; lg.fillRect(0, 0, 4, 256); for (let y = 0; y < 256; y += 2 + Math.floor(rnd() * 5)) { lg.fillStyle = `rgba(60,42,20,${0.12 + rnd() * rnd() * 0.5})`; lg.fillRect(0, y, 4, 1 + Math.floor(rnd() * 1.4)); }
+    const lt = new THREE.CanvasTexture(lc); lt.colorSpace = THREE.SRGBColorSpace; lt.wrapS = lt.wrapT = THREE.RepeatWrapping; lt.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    const edgeMat = new THREE.MeshStandardMaterial({ map: lt, color: new THREE.Color(T.paper).multiplyScalar(0.86), roughness: 0.95, side: THREE.DoubleSide });
+    const leafUV = (g, h) => { const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, uv.getY(i) * h / LEAVES); return g; };
     const sideMat = new THREE.MeshStandardMaterial({ color: T.clothSide, roughness: 0.8 });
 
     SHEETS.forEach(([front, back, kind], i) => {
@@ -74,7 +82,7 @@ export class Book {
         s.mesh = mesh; if (inner === 'bot') { s.top = BT; s.bot = 0; } else { s.top = 0; s.bot = -BT; }
       } else {
         pivot.add(faceMesh(ft.map, false, ST / 2), faceMesh(bt.map, true, -ST / 2));
-        const edge = new THREE.Mesh(new THREE.BoxGeometry(PW, ST, PH), [edgeMat, edgeMat, hidden, hidden, edgeMat, edgeMat]); edge.position.x = G0 + PW / 2; edge.castShadow = edge.receiveShadow = true; pivot.add(edge);
+        const edge = new THREE.Mesh(leafUV(new THREE.BoxGeometry(PW, ST, PH), ST), [edgeMat, edgeMat, hidden, hidden, edgeMat, edgeMat]); edge.position.x = G0 + PW / 2; edge.castShadow = edge.receiveShadow = true; pivot.add(edge);
         s.top = ST / 2; s.bot = -ST / 2;
       }
       // pop-ups glued to either face of this sheet
@@ -116,26 +124,24 @@ export class Book {
     this.sheets[N - 1].yR = 0; this.sheets[N - 1].yL = this.sheets[NI].yL + ST / 2 + this.gaps[N - 1];
     // how much each sheet adds to the stack it lies on: its card, and the pop-ups folded under it
     for (const s of this.sheets) { const card = s.isBoard ? 0 : ST; s.addR = card + (this.gaps[s.i + 1] ?? 0); s.addL = card + (s.i ? this.gaps[s.i] : 0); }
-    this.W = this.sheets[0].yR; // the strip spans the shut block; the case keeps this length open
+    this.W = this.sheets[0].yR; // the strip spans the shut block
+    this.D = stripShape(0, this.W)[1] + 0.04; // and lying flat, with its round pressed out, it holds the boards this far apart
     // a shut spread holds its pop-ups folded flat: seen from the edge, that is layered card, not air
-    const [lc, lg] = (() => { const c = document.createElement('canvas'); c.width = 16; c.height = 64; return [c, c.getContext('2d')]; })();
-    lg.fillStyle = '#cbbd9c'; lg.fillRect(0, 0, 16, 64); for (let y = 0; y < 64; y += 4) { lg.fillStyle = 'rgba(70,50,25,.28)'; lg.fillRect(0, y, 16, 1); }
-    const lt = new THREE.CanvasTexture(lc); lt.colorSpace = THREE.SRGBColorSpace; lt.wrapS = lt.wrapT = THREE.RepeatWrapping;
-    const fillMat = new THREE.MeshStandardMaterial({ map: lt, color: '#a2957f', roughness: 0.95 }); // in the shade between the leaves, so it never reads as page thickness
     this.fillers = [];
     // flush with the page edges and just overlapping both pages: an inset or a slit leaves lit paper thinner than a pixel,
     // which shimmers along the block whenever the view moves
     for (let k = 1; k < N; k++) {
-      const pop = this.faces.some(f => f.spread === k), mat = fillMat;
-      const g = this.gaps[k] + 0.002, m = new THREE.Mesh(new THREE.BoxGeometry(PW, g, PH), [mat, mat, hidden, hidden, mat, mat]);
-      m.position.x = G0 + PW / 2; m.castShadow = m.receiveShadow = true;
-      if (pop) lt.repeat.set(1, g / 0.05);
+      const g = this.gaps[k] + 0.002, m = new THREE.Mesh(leafUV(new THREE.BoxGeometry(PW, g, PH), g), [edgeMat, edgeMat, hidden, hidden, edgeMat, edgeMat]);
+      m.position.x = G0 + PW / 2; m.castShadow = m.receiveShadow = true; m.matrixAutoUpdate = false;
       this.sheets[k].pivot.add(m); this.fillers.push({ k, m, g: this.gaps[k] });
     }
-    // the back of the block, one glued band through every sheet's spine end and on to both boards: it folds at the open spread
-    // like a tent over the strip, and bridges to the board as the endpaper's hinge at the first and last spreads
-    this.backSeg = N - 1;
-    this.back = new THREE.Mesh(new THREE.PlaneGeometry(1, PH, this.backSeg, 1), new THREE.MeshStandardMaterial({ color: T.endpaper[0], roughness: 0.95, side: THREE.DoubleSide }));
+    // the back of the block: every leaf's root rises out of the spine and bends over to its page, so seen from the head or tail the whole
+    // section between the strip and the leaves is paper, and from above it is the top page curving down into the crease
+    const seg = this.rootSeg = 6, M = (N - 1) * seg, rp = new Float32Array((M + 1) * 6 * 3), ruv = new Float32Array((M + 1) * 6 * 2), ri = [];
+    for (const o of [0, 1, 2]) for (let j = 0; j < M; j++) { const a = (o * (M + 1) + j) * 2; ri.push(a, a + 2, a + 1, a + 2, a + 3, a + 1); }
+    for (let j = 0; j <= M; j++) for (const o of [1, 2]) for (const e of [0, 1]) { const v = ((o * (M + 1) + j) * 2 + e) * 2; ruv[v] = e; ruv[v + 1] = j / M * this.W / LEAVES; }
+    const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.BufferAttribute(rp, 3)); rg.setAttribute('uv', new THREE.BufferAttribute(ruv, 2)); rg.setIndex(ri); rg.addGroup(0, 6 * M, 0); rg.addGroup(6 * M, 12 * M, 1);
+    this.back = new THREE.Mesh(rg, [new THREE.MeshStandardMaterial({ color: '#a88a5a', roughness: 0.9, side: THREE.DoubleSide, emissive: T.paper, emissiveIntensity: 0.14 }), edgeMat]); // paper that faces away from the lamp still takes the light off the page beside it
     this.back.castShadow = this.back.receiveShadow = true; this.back.frustumCulled = false; this.group.add(this.back);
     this.events = {}; // events.sheet({ type: 'lift' | 'land', sheet, board }) as a sheet leaves or reaches a stack
     // the cloth of the spine: a stiff strip between the boards, the joints either side of it flexing as they swing
@@ -149,7 +155,7 @@ export class Book {
     for (let i = 0; i < ring; i++) { const a = i * 2, b = ((i + 1) % ring) * 2; idx.push(a, b, a + 1, b, b + 1, a + 1); }
     for (let i = 1; i <= n; i++) for (const e of [0, 1]) { const a = (ring - 1 - i) * 2 + e, b = (ring - i) * 2 + e, c = (i - 1) * 2 + e, d = i * 2 + e; idx.push(...(e ? [a, b, c, a, c, d] : [a, c, b, a, d, c])); } // head and tail
     const sgeo = new THREE.BufferGeometry(); sgeo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); sgeo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2)); sgeo.setIndex(idx); sgeo.addGroup(0, 6 * n, 0); sgeo.addGroup(6 * n, idx.length - 6 * n, 1); // the cloth outside, the lining and cut ends
-    this.spine = new THREE.Mesh(sgeo, [new THREE.MeshPhysicalMaterial({ map: spineTex, roughness: 0.75, sheen: 0.6, sheenRoughness: 0.6, sheenColor: new THREE.Color('#7a3a30') }), sideMat]);
+    this.spine = new THREE.Mesh(sgeo, [new THREE.MeshPhysicalMaterial({ map: spineTex, roughness: 0.75, sheen: 0.6, sheenRoughness: 0.6, sheenColor: new THREE.Color('#7a3a30') }), new THREE.MeshStandardMaterial({ color: '#8a3a30', roughness: 0.85 })]);
     this.spine.castShadow = true; this.spine.receiveShadow = true; this.spine.frustumCulled = false; this.group.add(this.spine);
     this.p = -1; this.set(0);
   }
@@ -178,33 +184,34 @@ export class Book {
     return s._ends;
   }
 
-  // world x of what is visible (closed front → right block, open → spine, closed back → left)
-  centerX(p) { return p < 1 ? (BW / 2 - HINGE) * (1 - sstep(0, 1, p)) : p > N - 1 ? -(BW / 2 - HINGE) * sstep(N - 1, N, p) : 0; }
+  // where what is visible sits in the book's own frame, whose x = 0 is the crease once open: the shut book centred, the open case fixed on the desk while the crease crosses it
+  centerX() { return this.cx; }
 
   // pages do not lift on hover (a third, hover argument is ignored): a lifted page opens a wedge in the block and squeezes
   // the pop-ups on the facing page flat
   set(p, time = 0) {
     this.p = p; let L = 0, R = 0;
     for (const s of this.sheets) { s.t = Math.min(1, Math.max(0, p - s.i)); s.e = turnEase(s.t); L += s.e * s.addL; R += (1 - s.e) * s.addR; }
-    // the two stacks meet at the gutter, as high as the thicker one. The thinner side's board climbs to it from the desk, so it
-    // slopes (sL, sR), and the strip between the boards leans over: upright against the block near the covers, flat under it mid-book.
-    const gy = (L + R + Math.hypot(L - R, 0.15)) / 2; let d = 0, sL = 0, sR = 0, cL = 1, cR = 1, bl = 0, br = 0;
-    for (let i = 0; i < 4; i++) { // the boards part by what the strip's lean frees, the lighter side sliding most
-      bl = d * R / (L + R); br = d * L / (L + R); sL = (gy - L) / (BW + bl); sR = (gy - R) / (BW + br); cL = Math.sqrt(1 - sL * sL); cR = Math.sqrt(1 - sR * sR);
-      const dy = (R * cR + br * sR) - (L * cL + bl * sL), w = stripShape(dy, this.W)[1] + 0.04; d = Math.sqrt(Math.max(0, w * w - dy * dy));
-    }
-    const tL = Math.asin(sL), tR = Math.asin(sR), span = Math.PI + tL + tR;
-    // a sheet's slot on a stack: its height above that board, sheared toward the gutter so the stack's back runs from the board's hinge to the gutter
-    const onLeft = h => { const u = Math.min(1, h / Math.max(1e-6, L - ST / 2)), x = -bl * (1 - u), y = h - L; return [x * cL - y * sL, gy + x * sL + y * cL]; };
-    const onRight = h => { const u = Math.min(1, h / Math.max(1e-6, R - ST / 2)), x = br * (1 - u), y = h - R; return [x * cR + y * sR, gy - x * sR + y * cR]; };
-    for (const s of this.sheets) {
-      s.theta = -tR + span * s.e;
+    // the case lies flat on the desk while it is open: the strip flat between the boards, each stack on its board. Only when a board stands past
+    // upright does the strip stand with it, against the block; the block's leaves shear to follow, as they do in the hand
+    const S = this.sheets, D = this.D, u = L / (L + R), X = D / 2, low = sstep(0.5, 1, Math.min(S[0].e, 1 - S[N - 1].e)), c = Math.cos(Math.PI / 2 * low), sn = Math.sin(Math.PI / 2 * low);
+    let w = D; for (let i = 0; i < 5; i++) w = stripShape(w * c, this.W)[1] + 0.04;
+    const front = p < N / 2, Fx = front ? D * (1 - u) - w * sn : -D * u, Fy = front ? w * c : 0, Bx = front ? D * (1 - u) : -D * u + w * sn, By = front ? 0 : w * c;
+    this.cx = p < 1 ? X + (BW / 2 - HINGE + X) * (1 - sstep(0, 1, p)) : p > N - 1 ? -X - (BW / 2 - HINGE + X) * sstep(N - 1, N, p) : X - D * u;
+    // the top pages reach the crease at x = 0: the thinner stack's lies flat to it and the thicker stack's stops short, to curve down to it.
+    // A sheet's slot on a stack is sheared along the line from the board's hinge to that stack's top page
+    const tl = Fx + (-RUN * Math.max(0, L - R) - Fx) * low, tr = Bx + (RUN * Math.max(0, R - L) - Bx) * low;
+    const onLeft = h => [Fx + (tl - Fx) * Math.min(1, h / Math.max(1e-6, L - ST / 2)), h];
+    const onRight = h => [Bx + (tr - Bx) * Math.min(1, h / Math.max(1e-6, R - ST / 2)), h];
+    for (const s of S) {
+      s.theta = Math.PI * s.e;
       const [xr, yr] = onRight(s.yR), [xl, yl] = onLeft(s.yL);
       // the spine end only ever moves away from the stack the page is over: it rises while the page is still over the
       // right-hand stack, and comes down only once the page is over the left-hand one
       const slide = yl > yr ? sstep(0.02, 0.5, s.e) : sstep(0.5, 0.98, s.e);
-      s.pivot.position.set(xr + (xl - xr) * slide, yr + (yl - yr) * slide, 0); s.pivot.rotation.z = s.theta;
-      const rest = span * s.e <= REST || span * (1 - s.e) <= REST;
+      if (s.isBoard) s.pivot.position.set(s.i ? Bx : Fx, s.i ? By : Fy, 0); else s.pivot.position.set(xr + (xl - xr) * slide, yr + (yl - yr) * slide, 0);
+      s.pivot.rotation.z = s.theta;
+      const rest = Math.PI * s.e <= REST || Math.PI * (1 - s.e) <= REST;
       if (s.rest !== undefined && s.rest !== rest) this.events.sheet?.({ type: s.rest ? 'lift' : 'land', sheet: s.i, board: s.isBoard });
       s.rest = rest;
     }
@@ -237,7 +244,9 @@ export class Book {
       const c = 1 - sstep(0.02, 0.3, this.sheets[k - 1].theta - this.sheets[k].theta), right = p < k, host = this.sheets[right ? k : k - 1];
       m.visible = c > 0; if (!m.visible) continue;
       if (m.parent !== host.pivot) host.pivot.add(m);
-      m.scale.y = c; m.position.y = right ? host.top + g * c / 2 : host.bot - g * c / 2;
+      // it leans with the stack, from the end of the sheet under it to the end of the sheet over it, so the block's ends slope and do not step
+      const o = this.sheets[right ? k - 1 : k], dx = o.pivot.position.x - host.pivot.position.x, dy = o.pivot.position.y - host.pivot.position.y, a = host.theta, lx = dx * Math.cos(a) + dy * Math.sin(a), ly = dy * Math.cos(a) - dx * Math.sin(a);
+      m.scale.y = c; m.position.y = right ? host.top + g * c / 2 : host.bot - g * c / 2; m.updateMatrix(); m.matrix.elements[4] = o.isBoard ? 0 : lx / ly * c; m.matrix.elements[12] += o.isBoard ? 0 : lx / ly * m.position.y;
     }
     if (p !== this.caseAt) { this.caseAt = p; this.updateCase(); }
   }
@@ -249,7 +258,7 @@ export class Book {
     const n = this.spineSeg, nj = 5, ns = n - 2 * nj, F = at(cov, 0, 0), B = at(bk, 0, 0), Cf = at(cov, 0, cov.top), Cb = at(bk, 0, bk.bot);
     const len = Math.hypot(F[0] - B[0], F[1] - B[1]), tx = (F[0] - B[0]) / len, ty = (F[1] - B[1]) / len, mx = -ty, my = tx; // along the strip, back to front, and outward
     const [crown, chord] = stripShape(F[1] - B[1], this.W), off = STRIP * crown / CROWN; // it hangs between the boards' outer corners: well off them when it stands, level with them flat on the desk
-    const under = -BT - ((Cf[1] + Cb[1] - Math.abs(ty) * chord) / 2 + my * off), slide = under > 0 ? under / ty : 0; // its lower end rests on the desk, so it rides up along itself
+    const under = -BT - ((Cf[1] + Cb[1] - Math.abs(ty) * chord) / 2 + my * off), slide = under > 1e-6 ? under / ty : 0; // its lower end rests on the desk, so it rides up along itself
     const end = dir => [(Cf[0] + Cb[0] - tx * dir * chord) / 2 + mx * off + tx * slide, (Cf[1] + Cb[1] - ty * dir * chord) / 2 + my * off + ty * slide], Sb = end(1), Sf = end(-1);
     // a joint: cloth leaving the board along its face and arriving along the strip, so it rolls open and creases as the board swings
     const joint = (C, s, Sx, dir, t) => {
@@ -265,10 +274,18 @@ export class Book {
       else { const w = (i - nj) / ns, h = 4 * w * (1 - w) * crown; line.push([Sb[0] + (Sf[0] - Sb[0]) * w + mx * h, Sb[1] + (Sf[1] - Sb[1]) * w + my * h]); }
     }
     const P = this.spine.geometry.attributes.position, ring = 2 * (n + 1), set = (i, x, y) => { y = Math.max(y, -BT); P.setXYZ(i * 2, x, y, BH / 2); P.setXYZ(i * 2 + 1, x, y, -BH / 2); }; // the desk stops it
-    for (let i = 0; i <= n; i++) { const [x, y] = line[i], k = LINING * Math.max(0, Math.min(1, (i - nj) / 2, (n - nj - i) / 2)); set(i, x, y); set(ring - 1 - i, x - mx * k, y - my * k); } // only the strip is lined, thinning to its ends: a joint is bare cloth
+    const inner = []; for (let i = 0; i <= n; i++) { const [x, y] = line[i], k = LINING * Math.max(0, Math.min(1, (i - nj) / 2, (n - nj - i) / 2)); set(i, x, y); set(ring - 1 - i, x - mx * k, y - my * k); inner.push([x - mx * k, Math.max(y - my * k, -BT)]); } // only the strip is lined, thinning to its ends: a joint is bare cloth
     P.needsUpdate = true; this.spine.geometry.computeVertexNormals(); this.spine.geometry.computeBoundingSphere();
-    const Q = this.back.geometry.attributes.position, m = this.backSeg + 1;
-    S.forEach((s, i) => { const q = s.pivot.position; Q.setXYZ(i, q.x, q.y, PH / 2); Q.setXYZ(i + m, q.x, q.y, -PH / 2); });
+    // the roots: from each sheet's spine end, just inside it and just under its face so paper meets paper, along a smooth curve to the next sheet's,
+    // with the spine beneath; each leaf is rooted on the strip where it lies when the book is shut
+    const Q = this.back.geometry.attributes.position, seg = this.rootSeg, M = (N - 1) * seg, z = PH / 2 - 0.01, put = (o, j, e, x, y, zz) => Q.setXYZ((o * (M + 1) + j) * 2 + e, x, y, zz);
+    const face = (s, up) => at(s, G0 + 0.02, s.isBoard ? 0 : up ? s.top + (s.bot - s.top) * s.e : s.bot + (s.top - s.bot) * s.e), root = s => s.i === 0 ? n : s.i === N - 1 ? 0 : nj + ns * s.yR / this.W;
+    // in a stack each sheet's end stops short of the one above it, so the roots reach up under that overhang, and let go of it as that sheet lifts away
+    const tip = s => { const on = s.e >= 1 ? S[s.i + 1] : s.e <= 0 ? S[s.i - 1] : null, k = on ? sstep(0.8, 1, s.e >= 1 ? on.e : 1 - on.e) : 0, [x, y] = face(s, true); return [x, y + ((on ? face(on, false)[1] : y) - y) * k - 0.004]; };
+    for (let i = 0; i < N - 1; i++) { const a = tip(S[i]), b = tip(S[i + 1]), ra = root(S[i]), rb = root(S[i + 1]);
+      for (let m = 0; m <= seg; m++) { const t = m / seg, j = i * seg + m, x = a[0] + (b[0] - a[0]) * (3 * (1 - t) ** 2 * t * 0.45 + 3 * (1 - t) * t * t * 0.55 + t ** 3), y = a[1] + (b[1] - a[1]) * t * t * (3 - 2 * t);
+        const r = ra + (rb - ra) * t, r0 = Math.min(n - 1, Math.floor(r)), f = r - r0, ox = inner[r0][0] + (inner[r0 + 1][0] - inner[r0][0]) * f, oy = inner[r0][1] + (inner[r0 + 1][1] - inner[r0][1]) * f;
+        put(0, j, 0, x, y, z); put(0, j, 1, x, y, -z); put(1, j, 0, ox, oy, z); put(1, j, 1, x, y, z); put(2, j, 0, ox, oy, -z); put(2, j, 1, x, y, -z); } }
     Q.needsUpdate = true; this.back.geometry.computeVertexNormals(); this.back.geometry.computeBoundingSphere();
   }
 }
