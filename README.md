@@ -17,9 +17,10 @@ Endterm project for AI Fundamentals (AIF1303), QAIRU, Fall 2026, by Akhmetzhan T
 - **Screen readers:** the text of the open spread is mirrored into the page as plain HTML and announced when the spread changes.
 
 ## How it is built
-- **Pages:** stiff card that turns about the spine. Every pop-up piece is a rigid card hinged to its page by a glued tab.
-- **Folding:** all pieces on a page share one fold angle, set by the angle between the two pages of the spread. They stay inside their half of that wedge, so paper never passes through paper.
-- **Collision check:** `scripts/check/collide.mjs` runs every page turn and checks every pop-up and page vertex against every page.
+- **Case:** two cloth boards and a rigid spine strip, joined by flexible joints. The two stacks of pages meet at the gutter, so the thinner stack's board slopes from there down to the desk, and the strip leans over as pages cross: upright against the block near the covers, flat under it mid-book.
+- **Pages:** stiff card, always the same thickness, that turns about the back of the block. The stacks shear as they rock, as real paper does. Every pop-up piece is a rigid card hinged to its page by a glued tab.
+- **Folding:** all pieces on a page share one fold angle, set by the angle between the two pages of the spread, so they only rise as it opens. They stay inside their half of that wedge, so paper never passes through paper.
+- **Collision check:** `scripts/check/collide.mjs` runs every page turn and checks every pop-up and page vertex against every page. `scripts/check/book.mjs` measures the book through every turn: the strip's length, page thickness, the gutter, the desk, and that no sheet or pop-up jumps or reverses.
 - **Figure data:** the data in `src/data/` is generated and checked in Python, in `scripts/verify/`.
 
 Develop: `npm i && npm run dev`. Third-party assets and sounds are credited in `public/assets/CREDITS.md` and `public/audio/CREDITS.md`. The fonts (SIL Open Font License) are served from `public/fonts/`.

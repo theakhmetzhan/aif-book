@@ -196,7 +196,7 @@ export class Book {
     const onRight = h => { const u = Math.min(1, h / Math.max(1e-6, R - ST / 2)), x = br * (1 - u), y = h - R; return [x * cR + y * sR, gy - x * sR + y * cR]; };
     for (const s of this.sheets) {
       s.theta = -tR + span * s.e;
-      const [xr, yr] = onRight(s.yR), [xl, yl] = onLeft(s.i ? s.yL : 0);
+      const [xr, yr] = onRight(s.yR), [xl, yl] = onLeft(s.yL);
       // the spine end only ever moves away from the stack the page is over: it rises while the page is still over the
       // right-hand stack, and comes down only once the page is over the left-hand one
       const slide = yl > yr ? sstep(0.02, 0.5, s.e) : sstep(0.5, 0.98, s.e);
@@ -219,7 +219,7 @@ export class Book {
         const h = half * (G0 + (f.side === 'front' ? pc.x0 : PW - pc.x1)) - 0.02 - (pc.layer + pc.span) * (CARD + 0.0015);
         phiMax = Math.min(phiMax, Math.asin(Math.min(1, Math.max(0, h / pc.H))));
       }
-      // flat while a page of the spread is in the air; they stand up only as it settles, and fold as soon as it lifts
+      // flat while a page of the spread is high in the air; they stand up as it comes down, and fold as soon as it lifts
       const u = Math.min(1, Math.max(0, alpha / Math.PI));
       const mech = Math.PI / 2 * sstep(0.78, 1, u);
       let phi = Math.max(0, smin(mech, phiMax));

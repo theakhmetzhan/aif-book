@@ -6,7 +6,7 @@ const errs=[]; p.on('pageerror',e=>errs.push(e.message)); p.on('console',m=>['er
 await p.goto(''+(process.env.URL||"http://localhost:5181/aif-book/")+'?freeze=1&p=0',{waitUntil:'networkidle0'}); await p.waitForFunction(()=>document.body.classList.contains('ready'),{timeout:90000});
 const r=await p.evaluate(()=>{
   const B=__book.book, S=B.sheets, N=S.length, BT=0.2, W=S[0].yR, V=B.group.position.constructor, dp=0.0025;
-  const out={strip:[1e9,0], desk:0, spineInBlock:0, thickness:[1e9,0], gutterStep:0, poseJump:0, angleJump:0, phiReversals:0, phiStep:0, backGap:0};
+  const out={strip:[1e9,0], desk:0, spineInBlock:0, thickness:[1e9,0], fillOnTurningPage:0, fillJump:0, gutterStep:0, poseJump:0, angleJump:0, phiReversals:0, phiStep:0, backGap:0};
   const at=(s,x,y)=>{const c=Math.cos(s.theta),n=Math.sin(s.theta),q=s.pivot.position;return [q.x+x*c-y*n,q.y+x*n+y*c];};
   let prev=null; const phi={}, fold=f=>Math.PI/2-Math.abs(f.pieces[0].fold.rotation.x);
   for(let i=0;i<=N/dp;i++){ const q=+(i*dp).toFixed(4); B.set(q,0); B.group.updateMatrixWorld(true);
@@ -20,6 +20,8 @@ const r=await p.evaluate(()=>{
     const Q=B.back.geometry.attributes.position; out.backGap=Math.max(out.backGap,Math.hypot(Q.getX(0)-F.x,Q.getY(0)-F.y),Math.hypot(Q.getX(N-1)-K.x,Q.getY(N-1)-K.y));
     // a page is the same thickness everywhere, always: its two faces measured in the world, and no scale on the sheet
     for(const s of S){ if(s.isBoard) continue; const a=new V(5,s.top,0).applyMatrix4(s.pivot.matrixWorld),c=new V(5,s.bot,0).applyMatrix4(s.pivot.matrixWorld),t=a.distanceTo(c); out.thickness=[Math.min(out.thickness[0],t),Math.max(out.thickness[1],t)]; }
+    // what is seen at a page's edge must not grow or shrink with it either: the folded card between the leaves stays on a page at rest and changes gradually
+    for(const f of B.fillers){ const h=f.m.visible?f.m.scale.y*(f.g??B.gaps[f.k]):0; if(f.h!==undefined) out.fillJump=Math.max(out.fillJump,Math.abs(h-f.h)); f.h=h; const host=S.find(s=>s.pivot===f.m.parent); if(h>0&&host.t>0&&host.t<1) out.fillOnTurningPage++; }
     // an open spread: the two page surfaces meet at the gutter, with no step for a shadow to fall from
     if(Math.abs(q-Math.round(q))<1e-6&&q>=1&&q<=N-1){ const k=Math.round(q),L=S[k-1],R=S[k],y0=(s,y)=>{const a=at(s,0,y),u=[Math.cos(s.theta),Math.sin(s.theta)];return a[1]-a[0]/u[0]*u[1];}; out.gutterStep=Math.max(out.gutterStep,Math.abs(y0(L,L.bot)-y0(R,R.top))); }
     // nothing jumps: every sheet moves and turns continuously
@@ -31,6 +33,6 @@ const r=await p.evaluate(()=>{
 });
 const fails=[]; const need=(c,m)=>{ if(!c) fails.push(m); };
 need(r.strip[1]-r.strip[0]<0.05,'the strip changes length'); need(r.desk>-0.005,'something goes through the desk'); need(r.spineInBlock===0,'the spine enters the block');
-need(r.thickness[1]-r.thickness[0]<1e-4,'a page changes thickness'); need(r.gutterStep<0.02,'a step at the gutter'); need(r.backGap<1e-4,'the block leaves the case');
+need(r.thickness[1]-r.thickness[0]<1e-4&&r.fillOnTurningPage===0&&r.fillJump<0.05,'a page changes thickness'); need(r.gutterStep<0.02,'a step at the gutter'); need(r.backGap<1e-4,'the block leaves the case');
 need(r.poseJump<0.05,'a sheet jumps'); need(r.angleJump<0.05,'a sheet snaps round'); need(r.phiReversals===0,'a pop-up reverses'); need(r.phiStep<0.1,'a pop-up snaps');
 console.log(JSON.stringify(r,null,1)); console.log('errors',errs); console.log(fails.length?'FAIL: '+fails.join('; '):'PASS'); await b.close(); process.exit(fails.length||errs.length?1:0);
