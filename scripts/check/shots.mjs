@@ -6,7 +6,7 @@ import fs from 'fs';
 const [out, viewArg, stateArg] = process.argv.slice(2);
 const near = p => p < 4 ? -1 : 1; // the side the spine faces while the book is shut, and the thicker stack's far side
 const VIEWS = {
-  spine: p => [near(p) * 18, 1.4, 22, near(p) * 3, 1, 4], // desk level, off the spine's end
+  spine: p => [near(p) * 18, 1.4, 22, near(p) * 3, 1, 4, 11], // desk level, off the spine's end; the near plane skips the pen and pencil lying between camera and book
   head: () => [0, 1.4, -26, 0, 1, 0],
   tail: () => [0, 1.4, 26, 0, 1, 0],
   fore: p => [-near(p) * 34, 2.2, 6, 0, 1, 0],
@@ -29,7 +29,7 @@ const COMPLAINTS = [
   ['CP1', 'the back board is a ramp hanging in the air', 'owner-low at every state'],
   ['CP1', 'a few thick dark and pale bands, not a block of paper', 'owner-low, tail at every state'],
 ];
-const views = viewArg && viewArg !== 'all' ? viewArg.split(',') : Object.keys(VIEWS);
+const views = viewArg && viewArg !== 'all' ? viewArg.split(',').filter(v => VIEWS[v]) : Object.keys(VIEWS), rain = !viewArg || viewArg === 'all' || viewArg.split(',').includes('rain');
 const states = stateArg ? stateArg.split(',').map(Number) : Array.from({ length: 65 }, (_, i) => i / 8), rests = [0, 1, 2, 3, 4, 5, 6, 7, 8];
 const url = process.env.URL || 'http://localhost:5181/aif-book/', W = 1920, H = 1080, K = 3;
 const b = await puppeteer.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: 'new', protocolTimeout: 600000, args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] });
@@ -41,7 +41,7 @@ const frame = () => pg.evaluate(() => new Promise(r => requestAnimationFrame(() 
 const look = (p, c, zoom, exp) => pg.evaluate((p, c, zoom, exp, W, H, K) => {
   const B = __book, cam = B.cam, V = cam.position.constructor; B.set(p); B.book.set(p, 2); B.book.group.position.x = -B.book.centerX(p); B.book.group.updateMatrixWorld(true);
   B.rig.L.box.min.set(-1e3, -1e3, -1e3); B.rig.L.box.max.set(1e3, 1e3, 1e3); B.rig.L.rMin = 1; B.rig.L.thetaMin = -7; B.rig.L.thetaMax = 7; B.rig.L.phiMax = 3; B.rig.L.phiMin = 0.001;
-  B.rig.lookFrom(new V(c[0], c[1], c[2]), new V(c[3], c[4], c[5])); B.rig.update(1); cam.clearViewOffset(); cam.updateMatrixWorld(true);
+  cam.near = c[6] || 2; B.rig.lookFrom(new V(c[0], c[1], c[2]), new V(c[3], c[4], c[5])); B.rig.update(1); cam.clearViewOffset(); cam.updateProjectionMatrix(); cam.updateMatrixWorld(true);
   if (zoom) { // the crop: the spine's middle, at the end of the book nearest this camera
     const P = B.book.spine.geometry.attributes.position, m = B.book.spineSeg, z = Math.abs(c[2]) > Math.abs(c[0]) && Math.abs(c[2]) > Math.abs(c[1]) ? Math.sign(c[2]) * 10.3 : 0;
     const q = new V(P.getX(m), P.getY(m) + 0.8, z).applyMatrix4(B.book.group.matrixWorld).project(cam), w = W / K, h = H / K;
@@ -57,6 +57,10 @@ for (const v of views) {
     await look(p, c, true, +(process.env.EXP_CROP || 2)); await frame(); await pg.screenshot({ path: `${n}_crop.png` });
   }
   await pg.evaluate(() => __book.cam.clearViewOffset());
+}
+if (rain) { // 1.5: the window light on the wall, running live, a frame a second
+  fs.mkdirSync(`${out}/rain`, { recursive: true }); await look(4, [0, 12, 22, 6, 26, -40], false, 1.5); await pg.evaluate(() => { __book.room.freeze = false; });
+  for (let i = 0; i < 12; i++) { await new Promise(r => setTimeout(r, 1000)); await pg.screenshot({ path: `${out}/rain/s${String(i).padStart(2, '0')}.png` }); }
 }
 fs.writeFileSync(`${out}/COMPLAINTS.json`, JSON.stringify(COMPLAINTS, null, 1));
 console.log(JSON.stringify({ views, errors: errs })); await b.close(); process.exit(errs.length ? 1 : 0);

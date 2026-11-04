@@ -140,8 +140,8 @@ export class Book {
     const seg = this.rootSeg = 6, M = (N - 1) * seg, rp = new Float32Array((M + 1) * 6 * 3), ruv = new Float32Array((M + 1) * 6 * 2), ri = [];
     for (const o of [0, 1, 2]) for (let j = 0; j < M; j++) { const a = (o * (M + 1) + j) * 2; ri.push(a, a + 2, a + 1, a + 2, a + 3, a + 1); }
     for (let j = 0; j <= M; j++) for (const o of [1, 2]) for (const e of [0, 1]) { const v = ((o * (M + 1) + j) * 2 + e) * 2; ruv[v] = e; ruv[v + 1] = j / M * this.W / LEAVES; }
-    const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.BufferAttribute(rp, 3)); rg.setAttribute('uv', new THREE.BufferAttribute(ruv, 2)); rg.setIndex(ri); rg.addGroup(0, 6 * M, 0); rg.addGroup(6 * M, 12 * M, 1);
-    this.back = new THREE.Mesh(rg, [new THREE.MeshStandardMaterial({ color: '#a88a5a', roughness: 0.9, side: THREE.DoubleSide, emissive: T.paper, emissiveIntensity: 0.14, envMapIntensity: 0.15 }), edgeMat]); // paper that faces away from the lamp still takes the light off the page beside it
+    const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.BufferAttribute(rp, 3)); rg.setAttribute('uv', new THREE.BufferAttribute(ruv, 2)); rg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(rp.length).fill(1), 3)); rg.setIndex(ri); rg.addGroup(0, 6 * M, 0); rg.addGroup(6 * M, 12 * M, 1);
+    this.back = new THREE.Mesh(rg, [new THREE.MeshStandardMaterial({ color: T.paper, vertexColors: true, roughness: 0.9, side: THREE.DoubleSide, envMapIntensity: 0.15 }), edgeMat]);
     this.back.castShadow = this.back.receiveShadow = true; this.back.frustumCulled = false; this.group.add(this.back);
     this.events = {}; // events.sheet({ type: 'lift' | 'land', sheet, board }) as a sheet leaves or reaches a stack
     // the cloth of the spine: a stiff strip between the boards, the joints either side of it flexing as they swing
@@ -278,13 +278,17 @@ export class Book {
     P.needsUpdate = true; this.spine.geometry.computeVertexNormals(); this.spine.geometry.computeBoundingSphere();
     // the roots: from each sheet's spine end, just inside it and just under its face so paper meets paper, along a smooth curve to the next sheet's,
     // with the spine beneath; each leaf is rooted on the strip where it lies when the book is shut
-    const Q = this.back.geometry.attributes.position, seg = this.rootSeg, M = (N - 1) * seg, z = PH / 2 + 0.002, put = (o, j, e, x, y, zz) => Q.setXYZ((o * (M + 1) + j) * 2 + e, x, y, zz);
+    const Q = this.back.geometry.attributes.position, tone = this.back.geometry.attributes.color, seg = this.rootSeg, M = (N - 1) * seg, z = PH / 2 + 0.002, put = (o, j, e, x, y, zz) => Q.setXYZ((o * (M + 1) + j) * 2 + e, x, y, zz);
     const tip = s => { const [x, y] = at(s, G0 + 0.02, s.isBoard ? 0 : s.top + (s.bot - s.top) * s.e); return [x, y - 0.004]; }, root = s => s.i === 0 ? n : s.i === N - 1 ? 0 : nj + ns * s.yR / this.W;
     for (let i = 0; i < N - 1; i++) { const a = tip(S[i]), b = tip(S[i + 1]), ra = root(S[i]), rb = root(S[i + 1]), curve = sstep(0, 0.2, Math.abs(S[i].e - S[i + 1].e)); // straight down a stack's back, curved where a page leaves it
       for (let m = 0; m <= seg; m++) { const t = m / seg, j = i * seg + m, x = a[0] + (b[0] - a[0]) * (t + curve * (3 * (1 - t) ** 2 * t * 0.45 + 3 * (1 - t) * t * t * 0.55 + t ** 3 - t)), y = a[1] + (b[1] - a[1]) * (t + curve * (t * t * (3 - 2 * t) - t));
         const r = ra + (rb - ra) * t, r0 = Math.min(n - 1, Math.floor(r)), f = r - r0, ox = inner[r0][0] + (inner[r0 + 1][0] - inner[r0][0]) * f, oy = inner[r0][1] + (inner[r0 + 1][1] - inner[r0][1]) * f;
+        // paper darkens as it goes down into the crease, where the page beside it shades it
+        const k = Math.min(1, Math.abs(a[1] - b[1]) / 0.5), low = a[1] > b[1] ? t * t : (1 - t) ** 2, g = 1 - 0.75 * curve * (k * low + (1 - k) * Math.sin(Math.PI * t));
+        for (const e of [0, 1]) tone.setXYZ(j * 2 + e, g, g, g);
         put(0, j, 0, x, y, z); put(0, j, 1, x, y, -z); put(1, j, 0, ox, oy, z); put(1, j, 1, x, y, z); put(2, j, 0, ox, oy, -z); put(2, j, 1, x, y, -z); } }
-    Q.needsUpdate = true; this.back.geometry.computeVertexNormals(); this.back.geometry.computeBoundingSphere();
+    Q.needsUpdate = tone.needsUpdate = true; this.back.geometry.computeVertexNormals(); this.back.geometry.computeBoundingSphere();
+    const lit = this.back.geometry.attributes.normal; for (let v = 0; v < (M + 1) * 2; v++) lit.setXYZ(v, 0, 1, 0); // a page curving into the crease takes the page's light, not the window's
   }
 }
 
