@@ -6,7 +6,7 @@ const errs=[]; p.on('pageerror',e=>errs.push(e.message)); p.on('console',m=>['er
 await p.goto(''+(process.env.URL||"http://localhost:5181/aif-book/")+'?freeze=1&p=0',{waitUntil:'networkidle0'}); await p.waitForFunction(()=>document.body.classList.contains('ready'),{timeout:90000});
 const r=await p.evaluate(()=>{
   const B=__book.book, S=B.sheets, N=S.length, BT=0.2, W=S[0].yR, V=B.group.position.constructor, dp=0.0025;
-  const out={strip:[1e9,0], desk:0, spineInBlock:0, thickness:[1e9,0], fillOnTurningPage:0, fillJump:0, gutterStep:0, poseJump:0, spineJump:0, spineCross:0, spineOpen:0, angleJump:0, phiReversals:0, phiStep:0, backGap:0};
+  const out={strip:[1e9,0], desk:0, spineInBlock:0, thickness:[1e9,0], fillOnTurningPage:0, fillJump:0, gutterStep:0, poseJump:0, spineJump:0, spineCross:0, spineOpen:0, spineInBoard:0, angleJump:0, phiReversals:0, phiStep:0, backGap:0};
   const at=(s,x,y)=>{const c=Math.cos(s.theta),n=Math.sin(s.theta),q=s.pivot.position;return [q.x+x*c-y*n,q.y+x*n+y*c];};
   let prev=null, prevSpine=null; const phi={}, fold=f=>Math.PI/2-Math.abs(f.pieces[0].fold.rotation.x);
   for(let i=0;i<=N/dp;i++){ const q=+(i*dp).toFixed(4); B.set(q,0); B.group.updateMatrixWorld(true);
@@ -16,6 +16,8 @@ const r=await p.evaluate(()=>{
     const P=B.spine.geometry.attributes.position; for(let v=0;v<P.count;v++) out.desk=Math.min(out.desk,P.getY(v)+BT);
     // the spine stays outside the block: no spine vertex inside a page
     for(const s of S){ if(s.isBoard) continue; const c=Math.cos(s.theta),n=Math.sin(s.theta),o=s.pivot.position; for(let v=0;v<P.count;v+=2){ const dx=P.getX(v)-o.x,dy=P.getY(v)-o.y,lx=dx*c+dy*n,ly=-dx*n+dy*c; if(lx>0.07&&lx<14.07&&ly>s.bot&&ly<s.top) out.spineInBlock=Math.max(out.spineInBlock,Math.min(ly-s.bot,s.top-ly,lx-0.07)); } }
+    // nor a board: a board's cloth lies on its face and goes no deeper
+    for(const s of [S[0],S[N-1]]){ const c=Math.cos(s.theta),n=Math.sin(s.theta),o=s.pivot.position; for(let v=0;v<P.count;v+=2){ const dx=P.getX(v)-o.x,dy=P.getY(v)-o.y,lx=dx*c+dy*n,ly=-dx*n+dy*c; if(lx>0&&lx<14.3&&ly>s.bot&&ly<s.top) out.spineInBoard=Math.max(out.spineInBoard,Math.min(ly-s.bot,s.top-ly,lx)); } }
     // the block's back ends on the boards' hinges, so nothing separates the block from the case
     const Q=B.back.geometry.attributes.position; out.backGap=Math.max(out.backGap,Math.hypot(Q.getX(0)-F.x,Q.getY(0)-F.y),Math.hypot(Q.getX(N-1)-K.x,Q.getY(N-1)-K.y));
     // a page is the same thickness everywhere, always: its two faces measured in the world, and no scale on the sheet
@@ -40,5 +42,5 @@ const r=await p.evaluate(()=>{
 const fails=[]; const need=(c,m)=>{ if(!c) fails.push(m); };
 need(r.strip[1]-r.strip[0]<0.02,'the strip changes length'); need(r.desk>-0.005,'something goes through the desk'); need(r.spineInBlock===0,'the spine enters the block');
 need(r.thickness[1]-r.thickness[0]<1e-4&&r.fillOnTurningPage===0&&r.fillJump<0.05,'a page changes thickness'); need(r.gutterStep<0.02,'a step at the gutter'); need(r.backGap<1e-4,'the block leaves the case');
-need(r.poseJump<0.05,'a sheet jumps'); need(r.spineJump<0.05,'the spine jumps'); need(r.spineCross===0,'the spine passes through itself'); need(r.spineOpen===0,'the spine is open at its head or tail'); need(r.angleJump<0.05,'a sheet snaps round'); need(r.phiReversals===0,'a pop-up reverses'); need(r.phiStep<0.1,'a pop-up snaps');
+need(r.poseJump<0.05,'a sheet jumps'); need(r.spineJump<0.05,'the spine jumps'); need(r.spineCross===0,'the spine passes through itself'); need(r.spineOpen===0,'the spine is open at its head or tail'); need(r.spineInBoard<0.005,'the spine enters a board'); need(r.angleJump<0.05,'a sheet snaps round'); need(r.phiReversals===0,'a pop-up reverses'); need(r.phiStep<0.1,'a pop-up snaps');
 console.log(JSON.stringify(r,null,1)); console.log('errors',errs); console.log(fails.length?'FAIL: '+fails.join('; '):'PASS'); await b.close(); process.exit(fails.length||errs.length?1:0);

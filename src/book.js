@@ -254,7 +254,9 @@ export class Book {
     // a joint: cloth leaving the board along its face and arriving along the strip, so it rolls open and creases as the board swings
     const joint = (C, s, Sx, dir, t) => {
       const k = 0.25 * Math.hypot(Sx[0] - C[0], Sx[1] - C[1]), c = Math.cos(s.theta), sn = Math.sin(s.theta), a = (1 - t) ** 3, b = 3 * (1 - t) ** 2 * t, e = 3 * (1 - t) * t * t, f = t ** 3;
-      return [a * C[0] + b * (C[0] - c * k) + e * (Sx[0] + tx * dir * k) + f * Sx[0], a * C[1] + b * (C[1] - sn * k) + e * (Sx[1] + ty * dir * k) + f * Sx[1]];
+      const x = a * C[0] + b * (C[0] - c * k) + e * (Sx[0] + tx * dir * k) + f * Sx[0], y = a * C[1] + b * (C[1] - sn * k) + e * (Sx[1] + ty * dir * k) + f * Sx[1];
+      const u = (x - C[0]) * c + (y - C[1]) * sn, v = ((y - C[1]) * c - (x - C[0]) * sn) * dir;
+      return u > 0 && v < 0 ? [C[0] + u * c, C[1] + u * sn] : [x, y]; // the board stops it: folded back, the cloth lies along the board's face
     };
     const line = [];
     for (let i = 0; i <= n; i++) {
