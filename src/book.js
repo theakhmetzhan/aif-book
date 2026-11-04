@@ -1,6 +1,6 @@
 // The physical book: a case of two cloth boards and a stiff spine strip joined by flexible joints, stiff card pages whose roots rise out
 // of the spine in a fan, and the pop-ups glued to the pages. Open, the case lies flat on the desk and stays put: the two stacks sit on
-// their boards, the crease between the top pages crosses the strip as pages turn, and the thicker stack's top page curves down to it.
+// their boards, the crease between the top pages crosses the strip as pages turn, and both top pages roll down into it.
 // Each spread's pop-ups fold with the angle between its two pages and are kept inside their half of the wedge between those pages,
 // so paper never passes through paper.
 import * as THREE from 'three';
@@ -15,7 +15,7 @@ const N = SHEETS.length, NI = N - 2;
 const HINGE = 0; // boards hinge at the spine edge of the block and overhang it by a square elsewhere
 export const G0 = 0.07; // pages start this far from the hinge axis, so a turning page's corners never enter either stack
 const REST = 0.01; // a sheet within this angle of flat lies on its stack
-const STRIP = 0.2, CROWN = 0.3, LINING = 0.07, CLOTH = 0.012, VALLEY = 0.09, EASE = 0.7; // the spine strip stands this far off the block, is rounded this much when shut, and is this thick
+const STRIP = 0.2, CROWN = 0.3, LINING = 0.07, CLOTH = 0.012, EASE = 0.7, NECK = 0.25, DIP = 0.2; // the spine strip stands this far off the block, is rounded this much when shut, and is this thick
 const LEAVES = 0.5; // the paper-edge texture repeats every this many cm
 const RUN = 0.42; // the thicker stack's top page reaches the crease in this much run per unit of height: steep, as card curves into a gutter
 const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -139,7 +139,7 @@ export class Book {
     }
     // the back of the block: every leaf's root rises out of the spine and bends over to its page, so seen from the head or tail the whole
     // section between the strip and the leaves is paper, and from above it is the top page curving down into the crease
-    const seg = this.rootSeg = 12, fan = this.rootFan = 16, M = (N - 1) * seg, count = (M + 1) * (2 + 2 * (fan + 1)), rp = new Float32Array(count * 3), ruv = new Float32Array(count * 2), ri = [];
+    const seg = this.rootSeg = 16, fan = this.rootFan = 40, M = (N - 1) * seg, count = (M + 1) * (2 + 2 * (fan + 1)), rp = new Float32Array(count * 3), ruv = new Float32Array(count * 2), ri = [];
     const cap = this.rootCap = (o, j, c) => (M + 1) * 2 + (o * (M + 1) + j) * (fan + 1) + c; // a leaf's edge from the spine (c = 0) to the end of its sheet (c = fan), at head (o = 0) or tail
     for (let j = 0; j < M; j++) { const a = j * 2; ri.push(a, a + 2, a + 1, a + 2, a + 3, a + 1); }
     for (const o of [0, 1]) for (let j = 0; j < M; j++) for (let c = 0; c < fan; c++) { const a = cap(o, j, c), b = a + fan + 1; ri.push(a, b, a + 1, b, b + 1, a + 1); }
@@ -203,9 +203,10 @@ export class Book {
     let w = D; for (let i = 0; i < 5; i++) w = stripShape(w * c, this.W)[1] + 0.04;
     const front = p < N / 2, Fx = front ? D * (1 - u) - w * sn : -D * u, Fy = front ? w * c : 0, Bx = front ? D * (1 - u) : -D * u + w * sn, By = front ? 0 : w * c;
     this.cx = p < 1 ? X + (BW / 2 - HINGE + X) * (1 - sstep(0, 1, p)) : p > N - 1 ? -X - (BW / 2 - HINGE + X) * sstep(N - 1, N, p) : X - D * u;
-    // the top pages reach the crease at x = 0: the thinner stack's lies flat to it and the thicker stack's stops short, to curve down to it.
+    // the top pages stop short of the crease at x = 0, the thicker stack's further, and roll down into it; a page lying on a board runs flat to it.
     // A sheet's slot on a stack is sheared along the line from the board's hinge to that stack's top page
-    const tl = Fx + (-RUN * Math.max(0, L - R) - Fx) * low, tr = Bx + (RUN * Math.max(0, R - L) - Bx) * low;
+    this.neck = NECK * sstep(0, 0.3, Math.min(L, R)) * low;
+    const tl = Fx + (-Math.hypot(this.neck, RUN * Math.max(0, L - R)) - Fx) * low, tr = Bx + (Math.hypot(this.neck, RUN * Math.max(0, R - L)) - Bx) * low;
     const onLeft = h => [Fx + (tl - Fx) * Math.min(1, h / Math.max(1e-6, L - ST / 2)), h];
     const onRight = h => [Bx + (tr - Bx) * Math.min(1, h / Math.max(1e-6, R - ST / 2)), h];
     for (const s of S) {
@@ -285,20 +286,27 @@ export class Book {
     // with the spine beneath; each leaf is rooted on the strip where it lies when the book is shut
     const cap = this.rootCap, Q = this.back.geometry.attributes.position, UV = this.back.geometry.attributes.uv, tone = this.back.geometry.attributes.color, seg = this.rootSeg, fan = this.rootFan, M = (N - 1) * seg, z = PH / 2 + 0.002;
     const tip = s => { const [x, y] = at(s, G0 + 0.02, s.isBoard ? 0 : s.top + (s.bot - s.top) * s.e); return [x, y - 0.004]; }, root = s => s.i === 0 ? n : s.i === N - 1 ? 0 : nj + ns * s.yR / this.W;
-    const flat = sstep(0.5, 1, Math.min(S[0].e, 1 - S[N - 1].e)), parted = i => sstep(0, 0.2, Math.abs(S[i].e - S[i + 1].e));
+    const parted = i => sstep(0, 0.2, Math.abs(S[i].e - S[i + 1].e));
     const shut = s => (s.yR + (s.isBoard ? 0 : s.top + (s.bot - s.top) * s.e) - 0.004 * Math.cos(s.theta)) / LEAVES; // where a sheet's face comes in the block's lines
-    for (let i = 0; i < N - 1; i++) { const a = tip(S[i]), b = tip(S[i + 1]), ra = root(S[i]), rb = root(S[i + 1]), curve = parted(i); // straight down a stack's back, curved where a page leaves it
-      for (let m = 0; m <= seg; m++) { const t = m / seg, j = i * seg + m, rise = Math.min(1, Math.abs(a[1] - b[1]) / 0.5), roll = 1 - Math.cos(Math.PI / 2 * t), fall = Math.sin(Math.PI / 2 * t), steep = a[1] > b[1], x = a[0] + (b[0] - a[0]) * (t + curve * rise * ((steep ? fall : roll) - t)), y = a[1] + (b[1] - a[1]) * (t + curve * ((steep ? roll : fall) - t)) - VALLEY * curve * flat * (1 - rise) * Math.sin(Math.PI * t) ** 4;
-        const r = ra + (rb - ra) * t, r0 = Math.min(n - 1, Math.floor(r)), f = r - r0, ox = inner[r0][0] + (inner[r0 + 1][0] - inner[r0][0]) * f, oy = inner[r0][1] + (inner[r0 + 1][1] - inner[r0][1]) * f;
-        // on the steep side of the crease the roots run ahead of the page, so the leaves do not cross; paper darkens as it goes down into the crease, where the page beside it shades it
-        const g = 1 - 0.85 * curve * (rise * (steep ? fall : 1 - roll) ** 1.2 + (1 - rise) * Math.sin(Math.PI * t) ** 0.6);
-        for (const e of [0, 1]) tone.setXYZ(j * 2 + e, g, g, g);
-        Q.setXYZ(j * 2, x, y, PH / 2); Q.setXYZ(j * 2 + 1, x, y, -PH / 2);
-        // a leaf runs level along its stack, eases over and stands up out of the spine, each bend nested inside the one above; where a top page falls to the crease, the leaves beside it follow that fall
-        const lie = curve * rise * Math.cos(S[steep ? i : i + 1].theta) ** 12, ramp = Math.min(1, 1.5 * (steep ? 1 - t : t), 8 * (steep ? t : 1 - t)), free = (Math.cos(S[i].theta) ** 2 * (1 - t) + Math.cos(S[i + 1].theta) ** 2 * t) * (1 - curve * (lie * 0.2 * (steep ? t : 1 - t) * Math.min(1, 8 * (steep ? 1 - t : t)))), fp = Math.PI / 2 * Math.cos(Math.PI / 2 * t), rp = Math.PI / 2 * Math.sin(Math.PI / 2 * t), sx = (steep ? -1 : 1) * (b[0] - a[0]) * (1 + curve * rise * ((steep ? fp : rp) - 1)), sy = (steep ? -1 : 1) * (b[1] - a[1]) * (1 + curve * ((steep ? rp : fp) - 1)), sl = Math.hypot(sx, sy) || 1, mix = lie * ramp,
-          hx = Math.cos(S[i].theta) * (1 - t) + Math.cos(S[i + 1].theta) * t, hy = Math.sin(S[i].theta) * (1 - t) + Math.sin(S[i + 1].theta) * t, dx = hx + (sx / sl - hx) * mix, dy = hy + (sy / sl - hy) * mix, far = Math.hypot(x - ox, y - oy),
-          run = EASE * (1 - curve) * (1 - Math.min(1, Math.max(0, y / Math.max(1e-6, this.stackH[S[i].e > 0.5 ? 0 : 1]))) ** 4) * far, ex = x + dx * run, ey = y + dy * run, back = Math.abs(dx) > 0.05 ? Math.min(0.8 * far + run, Math.max(0, (ex - ox) / dx)) : 0, bx = (ex + ox) / 2 * (1 - free) + (ex - dx * back) * free, by = (ey + oy) / 2 * (1 - free) + (ey - dy * back) * free;
-        for (let c = 0; c <= fan; c++) { const v = c / fan, px = (1 - v) ** 2 * ox + 2 * v * (1 - v) * bx + v * v * ex, py = (1 - v) ** 2 * oy + 2 * v * (1 - v) * by + v * v * ey; Q.setXYZ(cap(0, j, c), px, py, z + j * 1e-4); Q.setXYZ(cap(1, j, c), px, py, -z - j * 1e-4); for (const o of [0, 1]) UV.setY(cap(o, j, c), shut(S[i]) + (shut(S[i + 1]) - shut(S[i])) * t); } } } // each leaf a hair proud of the last, so none shares a plane with its neighbour
+    // the top of the block: straight down a stack's back; between two top pages, two arcs that leave the pages level and meet steeply in the crease
+    const crest = [], seam = [], ends = S.map(tip);
+    for (let i = 0; i < N - 1; i++) { const a = ends[i], b = ends[i + 1], drop = a[1] - b[1], curve = parted(i), sink = this.neck * (Math.cos(S[i].theta) * Math.cos(S[i + 1].theta)) ** 12, even = 0.06 * (1 - Math.min(1, Math.abs(drop) / 0.5));
+      const wa = sink + even + RUN * Math.max(0, drop), wb = sink + even + RUN * Math.max(0, -drop), cut = Math.min(0.999, Math.max(0.001, wa / (wa + wb))), vx = a[0] + (b[0] - a[0]) * cut, vy = Math.min(a[1], b[1]) - DIP * sink / NECK;
+      seam[i] = { curve, cut, vx, vy };
+      for (let m = 0; m <= seg; m++) { const t = m / seg, first = t < cut, h = Math.PI / 2 * (first ? t / cut : (t - cut) / (1 - cut)), sn = Math.sin(h), cs = Math.cos(h), lx = a[0] + (b[0] - a[0]) * t, ly = a[1] + (b[1] - a[1]) * t;
+        const ax = first ? a[0] + (vx - a[0]) * sn : vx + (b[0] - vx) * (1 - cs), ay = first ? a[1] + (vy - a[1]) * (1 - cs) : vy + (b[1] - vy) * sn;
+        crest[i * seg + m] = [lx + (ax - lx) * curve, ly + (ay - ly) * curve, first ? sn : cs]; } }
+    // each sheet's leaf stands up out of the spine, eases over and runs on along its sheet, each bend nested inside the one above
+    const spineAt = r => { const r0 = Math.min(n - 1, Math.floor(r)), f = r - r0; return [inner[r0][0] + (inner[r0 + 1][0] - inner[r0][0]) * f, inner[r0][1] + (inner[r0 + 1][1] - inner[r0][1]) * f]; };
+    const leaf = S.map((s, k) => { const [x, y] = ends[k], [ox, oy] = spineAt(root(s)), dx = Math.cos(s.theta), dy = Math.sin(s.theta), far = Math.hypot(x - ox, y - oy), run = s.isBoard ? 0 : EASE * (1 - Math.min(1, Math.max(0, y / Math.max(1e-6, this.stackH[s.e > 0.5 ? 0 : 1]))) ** 4) * far;
+      return { rx: dx * run, ry: dy * run, bx: ox, by: y + dy * run }; });
+    // every line between is a blend of those, by way of one line standing up from the spine to the crease: blends of lines that do not cross cannot cross
+    for (let i = 0; i < N - 1; i++) { const A = leaf[i], B = leaf[i + 1], { curve, cut, vx, vy } = seam[i], ra = root(S[i]), rb = root(S[i + 1]), uva = shut(S[i]), uvb = shut(S[i + 1]), [wx, wy] = spineAt(ra + (rb - ra) * cut), cx = A.bx + (B.bx - A.bx) * cut, cy = A.by + (B.by - A.by) * cut, mx = cx + (wx - cx) * curve, my = cy + (vy - cy) * curve;
+      for (let m = 0; m <= seg; m++) { const t = m / seg, j = i * seg + m, [x, y, deep] = crest[j], [ox, oy] = spineAt(ra + (rb - ra) * t), near = t < cut ? A : B, w = t < cut ? t / cut : (1 - t) / (1 - cut);
+        const g = 1 - 0.85 * curve * deep ** 1.2; for (const e of [0, 1]) tone.setXYZ(j * 2 + e, g, g, g); // paper darkens as it goes down into the crease, where the page beside it shades it
+        const lap = 0.006 * curve * (1 - deep) ** 4; Q.setXYZ(j * 2, x, y + lap, PH / 2); Q.setXYZ(j * 2 + 1, x, y + lap, -PH / 2); // the arc starts on the page, not under it, or the page's edge shows along the join
+        const bx = near.bx + (mx - near.bx) * w, by = near.by + (my - near.by) * w, ex = x + near.rx * (1 - w), ey = y + near.ry * (1 - w);
+        for (let c = 0; c <= fan; c++) { const v = c / fan, px = (1 - v) ** 2 * ox + 2 * v * (1 - v) * bx + v * v * ex, py = (1 - v) ** 2 * oy + 2 * v * (1 - v) * by + v * v * ey; Q.setXYZ(cap(0, j, c), px, py, z + j * 1e-4); Q.setXYZ(cap(1, j, c), px, py, -z - j * 1e-4); for (const o of [0, 1]) UV.setY(cap(o, j, c), uva + (uvb - uva) * t); } } } // each leaf a hair proud of the last, so none shares a plane with its neighbour
     Q.needsUpdate = UV.needsUpdate = tone.needsUpdate = true; this.back.geometry.computeBoundingSphere();
   }
 }
