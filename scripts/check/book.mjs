@@ -3,7 +3,7 @@ import puppeteer from 'puppeteer-core';
 const b=await puppeteer.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:'new',args:['--use-angle=metal','--enable-gpu','--ignore-gpu-blocklist']});
 const p=await b.newPage(); await p.setViewport({width:800,height:500});
 const errs=[]; p.on('pageerror',e=>errs.push(e.message)); p.on('console',m=>['error','warn','warning'].includes(m.type())&&errs.push(m.text().slice(0,200)));
-await p.goto(''+(process.env.URL||"http://localhost:5181/aif-book/")+'?freeze=1&p=0',{waitUntil:'networkidle0'}); await p.waitForFunction(()=>document.body.classList.contains('ready'),{timeout:90000});
+await p.goto(''+(process.env.URL||"http://localhost:5181/aif-book/")+'?freeze=1&shot=1&dpr=1&t=2&p=0',{waitUntil:'networkidle0'}); await p.waitForFunction(()=>document.body.classList.contains('ready'),{timeout:90000});
 const r=await p.evaluate(()=>{
   const B=__book.book, S=B.sheets, N=S.length, BT=0.2, W=S[0].yR, V=B.group.position.constructor, dp=0.0025;
   const out={strip:[1e9,0], desk:0, spineInBlock:0, thickness:[1e9,0], fillOnTurningPage:0, fillJump:0, poseJump:0, spineJump:0, spineCross:0, spineOpen:0, spineInBoard:0, pocket:0, pocketAt:-1, boardLift:0, gutterRun:0, angleJump:0, phiReversals:0, phiStep:0};
@@ -53,8 +53,17 @@ const r=await p.evaluate(()=>{
   }
   return out;
 });
+// the owner's top view: what lies between the two surfaces of a first or last spread must render as paper, not as a dark strip. Measured in the rendered frame
+r.gutterTone=await p.evaluate(async()=>{ const B=__book, cam=B.cam, V=cam.position.constructor, gl=B.renderer.getContext(), S=B.book.sheets, tick=()=>new Promise(k=>requestAnimationFrame(()=>requestAnimationFrame(()=>requestAnimationFrame(k)))); let worst=1e9;
+  B.rig.L.box.min.set(-1e3,-1e3,-1e3); B.rig.L.box.max.set(1e3,1e3,1e3); B.rig.L.rMin=1; B.rig.L.phiMin=0.001; B.rig.L.thetaMin=-7; B.rig.L.thetaMax=7;
+  for(const [q,leaf,board] of [[1,S[1],S[0]],[7,S[6],S[7]]]){ B.set(q); B.rig.lookFrom(new V(-1.584,56.06,5.025),new V(-2.082,-1.124,1.352)); B.room.freeze=true; B.renderer.shadowMap.needsUpdate=true; await tick(); await tick();
+    const w=gl.drawingBufferWidth,h=gl.drawingBufferHeight,px=new Uint8Array(w*h*4); gl.readPixels(0,0,w,h,gl.RGBA,gl.UNSIGNED_BYTE,px); const g=B.book.group.position.x;
+    const lum=x=>{ const v=new V(x,2,0).project(cam),i=Math.round((v.x+1)/2*w),j=Math.round((v.y+1)/2*h),o=(j*w+i)*4; return .3*px[o]+.59*px[o+1]+.11*px[o+2]; }, med=a=>a.slice().sort((p,q)=>p-q)[a.length>>1];
+    const a=leaf.pivot.position.x+g+(q===1?0.07:-0.07), b=board.pivot.position.x+g, inner=[...Array(9)].map((_,i)=>lum(a+(b-a)*(.2+.6*i/8))), page=[...Array(9)].map((_,i)=>lum(a+(a-b)/Math.abs(a-b)*(2+i/4)));
+    worst=Math.min(worst,med(inner)/med(page)); }
+  return worst; });
 const fails=[]; const need=(c,m)=>{ if(!c) fails.push(m); };
 need(r.strip[1]-r.strip[0]<0.02,'the strip changes length'); need(r.desk>-0.005,'something goes through the desk'); need(r.spineInBlock===0,'the spine enters the block');
-need(r.thickness[1]-r.thickness[0]<1e-4&&r.fillOnTurningPage===0&&r.fillJump<0.05,'a page changes thickness'); need(r.pocket<0.01,'a gap between pages, spine and boards'); need(r.boardLift<0.005,'a board is off the desk'); need(r.gutterRun<1.1,'a wide strip at the gutter');
+need(r.thickness[1]-r.thickness[0]<1e-4&&r.fillOnTurningPage===0&&r.fillJump<0.05,'a page changes thickness'); need(r.pocket<0.01,'a gap between pages, spine and boards'); need(r.boardLift<0.005,'a board is off the desk'); need(r.gutterRun<0.95&&r.gutterTone>0.5,'a wide dark strip at the gutter');
 need(r.poseJump<0.05,'a sheet jumps'); need(r.spineJump<0.05,'the spine jumps'); need(r.spineCross===0,'the spine passes through itself'); need(r.spineOpen===0,'the spine is open at its head or tail'); need(r.spineInBoard<0.005,'the spine enters a board'); need(r.angleJump<0.05,'a sheet snaps round'); need(r.phiReversals===0,'a pop-up reverses'); need(r.phiStep<0.1,'a pop-up snaps');
 console.log(JSON.stringify(r,null,1)); console.log('errors',errs); console.log(fails.length?'FAIL: '+fails.join('; '):'PASS'); await b.close(); process.exit(fails.length||errs.length?1:0);

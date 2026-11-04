@@ -141,7 +141,7 @@ export class Book {
     for (const o of [0, 1, 2]) for (let j = 0; j < M; j++) { const a = (o * (M + 1) + j) * 2; ri.push(a, a + 2, a + 1, a + 2, a + 3, a + 1); }
     for (let j = 0; j <= M; j++) for (const o of [1, 2]) for (const e of [0, 1]) { const v = ((o * (M + 1) + j) * 2 + e) * 2; ruv[v] = e; ruv[v + 1] = j / M * this.W / LEAVES; }
     const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.BufferAttribute(rp, 3)); rg.setAttribute('uv', new THREE.BufferAttribute(ruv, 2)); rg.setIndex(ri); rg.addGroup(0, 6 * M, 0); rg.addGroup(6 * M, 12 * M, 1);
-    this.back = new THREE.Mesh(rg, [new THREE.MeshStandardMaterial({ color: '#a88a5a', roughness: 0.9, side: THREE.DoubleSide, emissive: T.paper, emissiveIntensity: 0.14 }), edgeMat]); // paper that faces away from the lamp still takes the light off the page beside it
+    this.back = new THREE.Mesh(rg, [new THREE.MeshStandardMaterial({ color: '#a88a5a', roughness: 0.9, side: THREE.DoubleSide, emissive: T.paper, emissiveIntensity: 0.14, envMapIntensity: 0.15 }), edgeMat]); // paper that faces away from the lamp still takes the light off the page beside it
     this.back.castShadow = this.back.receiveShadow = true; this.back.frustumCulled = false; this.group.add(this.back);
     this.events = {}; // events.sheet({ type: 'lift' | 'land', sheet, board }) as a sheet leaves or reaches a stack
     // the cloth of the spine: a stiff strip between the boards, the joints either side of it flexing as they swing
