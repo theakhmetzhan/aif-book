@@ -533,9 +533,10 @@ function lights(scene, renderer, mobile, out) {
   });
   out.lampObj?.userData.setGlow?.(1);
   // the room's reflections put the lamp off to the left, right for everything else on the desk; the lamp's own brass sees it
-  // overhead. Satin, not polished: its light is a shade's whole mouth, which a single point would mirror as a blown-out dot.
+  // overhead. Satin and darkened: the real source is the shade's whole mouth, its light spread thin; this single point packs
+  // all of it into one spot, so full-strength brass would mirror it as a white bloom instead of a soft streak of bulb colour.
   if (out.lampObj) { const up = out.bulb.clone().sub(out.lampObj.position).normalize().multiplyScalar(2.9), env = roomEnvironment(renderer, up.toArray());
-    out.lampObj.traverse(m => { if (m.isMesh && m.material.metalness === 1) { m.material = m.material.clone(); Object.assign(m.material, { envMap: env, envMapIntensity: 0.35, roughnessMap: null, roughness: 0.34, clearcoat: 0 }); } }); }
+    out.lampObj.traverse(m => { if (m.isMesh && m.material.metalness === 1) { m.material = m.material.clone(); m.material.color.multiplyScalar(0.18); Object.assign(m.material, { envMap: env, envMapIntensity: 1.2, roughnessMap: null, roughness: 0.34, clearcoat: 0 }); } }); }
   out.lamp = lamp; out.win = win;
 }
 
