@@ -202,14 +202,15 @@ export class Book {
     for (const s of this.sheets) { s.t = Math.min(1, Math.max(0, p - s.i)); s.e = turnEase(s.t); L += s.e * s.addL; R += (1 - s.e) * s.addR; }
     // the case lies flat on the desk while it is open: the strip flat between the boards, each stack on its board. Only when a board stands past
     // upright does the strip stand with it, against the block; the block's leaves shear to follow, as they do in the hand
-    this.stackH = [L, R]; const S = this.sheets, D = this.D, u = L / (L + R), X = D / 2, low = sstep(0.5, 1, Math.min(S[0].e, 1 - S[N - 1].e)), c = Math.cos(Math.PI / 2 * low), sn = Math.sin(Math.PI / 2 * low);
+    this.stackH = [L, R]; const S = this.sheets, D = this.D, u = L / (L + R), X = D / 2, low = Math.min(S[0].e, 1 - S[N - 1].e), c = Math.cos(Math.PI / 2 * low), sn = Math.sin(Math.PI / 2 * low);
     let w = D; for (let i = 0; i < 5; i++) w = stripShape(w * c, this.W)[1] + 0.04;
     const front = p < N / 2, Fx = front ? D * (1 - u) - w * sn : -D * u, Fy = front ? w * c : 0, Bx = front ? D * (1 - u) : -D * u + w * sn, By = front ? 0 : w * c;
     this.cx = p < 1 ? X + (BW / 2 - HINGE + X) * (1 - sstep(0, 1, p)) : p > N - 1 ? -X - (BW / 2 - HINGE + X) * sstep(N - 1, N, p) : X - D * u;
     // the top pages stop short of the crease at x = 0, the thicker stack's further, and roll down into it; a page lying on a board runs flat to it.
     // A sheet's slot on a stack is sheared along the line from the board's hinge to that stack's top page
     this.neck = NECK * sstep(0, 0.3, Math.min(L, R)) * low;
-    const tl = Fx + (-Math.max(this.neck, RUN * Math.max(0, L - R)) - Fx) * low, tr = Bx + (Math.max(this.neck, RUN * Math.max(0, R - L)) - Bx) * low;
+    const reach = d => (this.neck + RUN * d + Math.hypot(this.neck - RUN * d, 0.1)) / 2; // the greater of the two, rounded so no stack changes speed where they cross
+    const tl = Fx + (-reach(L - R) - Fx) * low, tr = Bx + (reach(R - L) - Bx) * low;
     const onLeft = h => [Fx + (tl - Fx) * Math.min(1, h / Math.max(1e-6, L - ST / 2)), h];
     const onRight = h => [Bx + (tr - Bx) * Math.min(1, h / Math.max(1e-6, R - ST / 2)), h];
     for (const s of S) {
