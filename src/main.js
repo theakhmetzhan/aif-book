@@ -62,7 +62,7 @@ async function start() {
   const pickAt = (x, y, objs) => { ndc.set(x / canvas.clientWidth * 2 - 1, -(y / canvas.clientHeight) * 2 + 1); ray.setFromCamera(ndc, cam); return ray.intersectObjects(objs, true)[0] || null; };
   const rig = new CameraRig(cam, canvas, { pick: (x, y) => pickAt(x, y, room.pickables)?.point || null, limits: { rMax: 500 } }); // far enough for a phone to fit the whole board
   const hq = qs.get('home')?.split(',').map(Number);
-  let userMoved = false, view = hq ? 'desk' : 'room', side = 0; // side: the page a phone's Read is on, 0 until it is swiped
+  let userMoved = false, view = 'room', side = 0; // side: the page a phone's Read is on, 0 until it is swiped
   const tan = fov => Math.tan(THREE.MathUtils.degToRad(fov / 2)), shut = () => { const ri = Math.round(target); return ri === 0 || ri === N; };
   const middle = () => shut() ? (target ? 0.25 : -0.25) : 0; // the shut book's cloth stands proud of the block on the spine's side
   // fit a box of half-width hw and half-height hh (as seen from the camera) inside the view, leaving room for the HUD
@@ -93,7 +93,7 @@ async function start() {
     view = name; userMoved = false; instant ||= reduced; const h = views[name]();
     Object.assign(rig.L, { floor: h.floor, phiMin: h.phiMin ?? 0.05 }); rig.home = h.target.clone(); rig.set(h.target, h, instant); markView();
   };
-  goView(view, true); // the room, unless ?home= asks for a desk camera
+  goView(view, true);
   if (qs.get('cam')) { const v = qs.get('cam').split(',').map(Number); rig.lookFrom(new THREE.Vector3(v[0], v[1], v[2]), new THREE.Vector3(v[3], v[4], v[5])); }
 
   // ---------- post ----------
@@ -168,13 +168,13 @@ async function start() {
   rig.onStart = hideHint;
   const moved = rig.onMove = () => { hideHint(); if (!userMoved) { userMoved = true; rig.free(); markView(); } };
   // a sideways swipe in a phone's Read slides to the other open page: the page follows the finger, then the camera eases the rest of the way
-  let slide0 = 0; rig.canSwipe = () => view === 'book' && onePage();
+  let slide0 = 0; rig.canSwipe = () => view === 'book' && !userMoved && onePage();
   rig.onSwipe = (dx, v) => {
     if (!rig.drag.slid) { rig.drag.slid = true; slide0 = rig.tg.x; hideHint(); }
     const wide = 2 * rig.g.r * rig.g.k * cam.aspect, x = THREE.MathUtils.clamp(slide0 - dx / boxW * wide, -PAGE - 1.5, PAGE + 1.5);
     if (v === undefined) { rig.tg.x = x; return; }
     if (Math.abs(x - slide0) > 2.5 || Math.abs(v) > 300) side = (v || dx) < 0 ? 1 : -1; // past a fifth of the way, or flicked
-    rig.set(rig.tg.clone().setX((side || (Math.round(target) === 1 ? 1 : -1)) * PAGE), rig.g, reduced);
+    goView('book');
   };
   const sideAt = (x, y) => { const hit = pickAt(x, y, [book.group]); if (!hit) return 0; const lx = book.group.worldToLocal(hit.point.clone()).x; const ri = Math.round(target); return ri === 0 ? 1 : ri === N ? -1 : lx >= 0 ? 1 : -1; };
   rig.onTap = e => { const s = sideAt(e.clientX, e.clientY); if (s) go(s); };

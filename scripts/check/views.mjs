@@ -13,7 +13,8 @@ const settle = async p => { await p.waitForFunction(() => { const r = __book.rig
 // measures in the page: what is seen from the camera the view has set
 const measure = async base => {
   const u = (await (await fetch(base + 'src/controls.js')).text()).match(/from\s+"([^"]*three[^"]*)"/)[1], T = await import(u), B = __book, cam = B.cam, bk = B.book;
-  const flip = (k, v) => { B.set(k); bk.set(k, 2); bk.group.position.x = -bk.centerX(k); bk.group.updateMatrixWorld(true); B.goView(v, true); B.rig.update(1); cam.updateMatrixWorld(true); cam.updateProjectionMatrix(); };
+  const tick = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const flip = async (k, v) => { B.set(k); B.goView(v, true); await tick(); await tick(); cam.updateMatrixWorld(true); }; // the app's own loop places the book and the camera: nothing here may put right what it got wrong
   const points = only => { const out = [], v = new T.Vector3(); bk.group.traverseVisible(o => { if (!o.isMesh || !o.geometry.attributes.position) return; let pop = false; for (let q = o; q && q !== bk.group; q = q.parent) if (q.userData.faceRoot) pop = true; if (only && !pop) return; const P = o.geometry.attributes.position; o.updateWorldMatrix(true, false); for (let i = 0; i < P.count; i += Math.max(1, P.count >> 7)) out.push(v.fromBufferAttribute(P, i).applyMatrix4(o.matrixWorld).clone()); }); return out; };
   const pops = () => points(true);
   const pageY = x => { const r = new T.Raycaster(new T.Vector3(x, 30, 9.4), new T.Vector3(0, -1, 0)); return r.intersectObject(bk.group, true)[0]?.point.y; }; // past every pop-up's foot
@@ -21,8 +22,9 @@ const measure = async base => {
   const frame = () => { const c = cam.position, seen = pops().map(a => a.clone().project(cam)); return { eye: c.y, left: pageY(-7), right: pageY(7), popsOut: seen.filter(q => Math.abs(q.x) > 1 || Math.abs(q.y) > 1).length, pops: seen.length }; };
   const fan = (W, H) => { const foot = Math.min(pageY(-7), pageY(7)); let worst = 0; for (const a of pops()) { const p = px(a, W, H), f = px(new T.Vector3(a.x, foot, a.z), W, H); worst = Math.max(worst, Math.hypot(p[0] - f[0], p[1] - f[1])); } return worst; };
   const box = (W, H) => { const x = points().map(a => a.x), l = px(new T.Vector3(Math.min(...x), 1, 0), W, H)[0], r = px(new T.Vector3(Math.max(...x), 1, 0), W, H)[0]; return (l + r) / 2 - W / 2; };
+  const crease = (W, H) => px(new T.Vector3(bk.group.position.x + bk.centerX(), 1, 0), W, H)[0] - W / 2; // mid-turn the block's outline swings with the leaf: this is what stays put
   const board = () => { const { z, xs, ys } = B.boardBox, c = [[xs[0], ys[1]], [xs[1], ys[1]], [xs[0], ys[0]], [xs[1], ys[0]]].map(([x, y]) => new T.Vector3(x, y, z).project(cam)); return { c: c.map(q => [q.x, q.y]) }; };
-  window.__m = { flip, frame, fan, box, board };
+  window.__m = { flip, frame, fan, box, crease, board };
 };
 
 for (const [name, type, opts] of [['WebKit', webkit, {}], ['Chromium', chromium, { executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] }]]) {
@@ -56,22 +58,25 @@ for (const [name, type, opts] of [['WebKit', webkit, {}], ['Chromium', chromium,
     await p.evaluate(measure, base);
     const W = size.width, H = size.height;
     for (let k = 1; k < 8; k++) {
-      const f = await p.evaluate(k => { __m.flip(k, 'watch'); return __m.frame(); }, k);
+      const f = await p.evaluate(async k => { await __m.flip(k, 'watch'); return __m.frame(); }, k);
       need(f.eye <= Math.min(f.left, f.right) + 0.03, `${tag}: Watch at ${k}: eye ${f.eye.toFixed(3)} above page ${Math.min(f.left, f.right).toFixed(3)}`);
       need(!f.popsOut, `${tag}: Watch at ${k}: ${f.popsOut} of ${f.pops} pop-up points out of frame`);
     }
-    const wrong = await p.evaluate(() => { __m.flip(3, 'watch'); const r = __book.rig; r.g.ph = r.s.ph = 1.45; r.apply(); __book.cam.updateMatrixWorld(true); return __m.frame(); });
+    const wrong = await p.evaluate(async () => { await __m.flip(3, 'watch'); const r = __book.rig; r.g.ph = r.s.ph = 1.45; r.apply(); __book.cam.updateMatrixWorld(true); return __m.frame(); });
     need(wrong.eye > Math.min(wrong.left, wrong.right) + 0.03, `${tag}: control: Watch check passes a raised eye`);
-    let worst = 0; for (let k = 1; k < 8; k++) worst = Math.max(worst, await p.evaluate(([k, W, H]) => { __m.flip(k, 'top'); return __m.fan(W, H); }, [k, W, H]));
+    let worst = 0; for (let k = 1; k < 8; k++) worst = Math.max(worst, await p.evaluate(async ([k, W, H]) => { await __m.flip(k, 'top'); return __m.fan(W, H); }, [k, W, H]));
     need(worst <= FLAT, `${tag}: Top: a pop-up stands ${worst.toFixed(1)} px off its foot`);
-    const close = await p.evaluate(([W, H]) => { __m.flip(3, 'top'); const r = __book.rig; r.s.r = 42; r.s.k = 0.344; r.apply(); __book.cam.updateMatrixWorld(true); __book.cam.updateProjectionMatrix(); return __m.fan(W, H); }, [W, H]);
+    const close = await p.evaluate(async ([W, H]) => { await __m.flip(3, 'top'); const r = __book.rig; r.s.r = 42; r.s.k = 0.344; r.apply(); __book.cam.updateMatrixWorld(true); __book.cam.updateProjectionMatrix(); return __m.fan(W, H); }, [W, H]);
     need(close > FLAT, `${tag}: control: Top check passes a close camera (${close.toFixed(1)} px)`);
-    for (const v of ['watch', 'top']) for (const k of [0, 1, 4, 7, 8]) { const off = await p.evaluate(([v, k, W, H]) => { __m.flip(k, v); return __m.box(W, H); }, [v, k, W, H]); need(Math.abs(off) < W * 0.01, `${tag}: ${v} at ${k}: book ${off.toFixed(1)} px off centre`); }
-    const bd = await p.evaluate(() => { __m.flip(3, 'board'); return __m.board(); }), [tl, tr, bl, br] = bd.c;
+    for (const v of ['watch', 'top']) for (const k of [0, 1, 4, 7, 8]) { const off = await p.evaluate(async ([v, k, W, H]) => { await __m.flip(k, v); return __m.box(W, H); }, [v, k, W, H]); need(Math.abs(off) < W * 0.01, `${tag}: ${v} at ${k}: book ${off.toFixed(1)} px off centre`); }
+    for (const v of ['watch', 'top']) for (const k of [1.5, 3.5, 5.5]) { const off = await p.evaluate(async ([v, k, W, H]) => { await __m.flip(k, v); return __m.crease(W, H); }, [v, k, W, H]); need(Math.abs(off) < W * 0.01, `${tag}: ${v} mid-turn at ${k}: crease ${off.toFixed(1)} px off centre`); }
+    const aside = await p.evaluate(async ([W, H]) => { await __m.flip(4, 'top'); const g = __book.book.group; g.position.x += 6; g.updateMatrixWorld(true); return [__m.box(W, H), __m.crease(W, H)]; }, [W, H]);
+    need(aside.every(a => Math.abs(a) >= W * 0.01), `${tag}: control: centre check passes a book 6 cm aside (${aside})`);
+    const bd = await p.evaluate(async () => { await __m.flip(3, 'board'); return __m.board(); }), [tl, tr, bl, br] = bd.c;
     need(Math.max(...bd.c.flat().map(Math.abs)) < 1, `${tag}: Board: a corner is out of frame ${JSON.stringify(bd.c)}`);
     need(Math.abs(tl[0] - bl[0]) < 0.002 && Math.abs(tr[0] - br[0]) < 0.002 && Math.abs(tl[1] - tr[1]) < 0.002, `${tag}: Board: not square on ${JSON.stringify(bd.c)}`);
     need(Math.max(tr[0] - tl[0], tl[1] - bl[1]) > 1.6, `${tag}: Board: only fills ${Math.max(tr[0] - tl[0], tl[1] - bl[1]) / 2}`);
-    const tilt = await p.evaluate(() => { __m.flip(3, 'board'); const r = __book.rig; r.s.ph = 1.45; r.apply(); __book.cam.updateMatrixWorld(true); return __m.board().c; });
+    const tilt = await p.evaluate(async () => { await __m.flip(3, 'board'); const r = __book.rig; r.s.ph = 1.45; r.apply(); __book.cam.updateMatrixWorld(true); return __m.board().c; });
     need(Math.abs(tilt[0][0] - tilt[2][0]) >= 0.002, `${tag}: control: Board check passes a tilted camera`);
     if (errs.length) fails.push(`${tag}: ${errs[0]}`);
     await p.close(); await c.close();
@@ -81,7 +86,8 @@ for (const [name, type, opts] of [['WebKit', webkit, {}], ['Chromium', chromium,
   // the labels at every phone width
   for (const size of [[320, 568], [360, 740], [390, 844], [430, 932], [667, 375], [844, 390]]) {
     const c = await b.newContext({ viewport: { width: size[0], height: size[1] }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }), p = await c.newPage();
-    await p.goto(url + '?dpr=1&t=2&shot=1&freeze=1'); await ready(p);
+    await p.goto(url + '?dpr=1&t=2&shot=1&freeze=1&home=78,1.36,10.5,-9'); await ready(p);
+    const first = await p.evaluate(() => __book.view); need(first === 'room', `${name} ${size}: ?home= opens on ${first}`);
     const r = await p.evaluate(() => [...document.querySelectorAll('#hud button')].map(b => { const r = b.getBoundingClientRect(); return { t: b.textContent, x0: r.left, x1: r.right, y0: r.top, y1: r.bottom }; }));
     for (const a of r) { need(a.x1 - a.x0 >= 44 && a.y1 - a.y0 >= 44 && a.x0 >= 0 && a.x1 <= size[0] && a.y1 <= size[1], `${name} ${size}: ${a.t} ${JSON.stringify(a)}`);
       for (const o of r) if (o !== a) need(a.x1 <= o.x0 + 0.5 || o.x1 <= a.x0 + 0.5 || a.y1 <= o.y0 + 0.5 || o.y1 <= a.y0 + 0.5, `${name} ${size}: ${a.t} overlaps ${o.t}`); }
@@ -119,6 +125,7 @@ for (const [name, type, opts] of [['WebKit', webkit, {}], ['Chromium', chromium,
   await tap(195, 420); await p.waitForFunction(k => __book.target === k, s0.turn + 1, { timeout: 10000 }); await settle(p);
   const s6 = await state(); need(s6.view === 'book' && s6.pressed === 'true' && Math.abs(s6.x + 7.2) < 0.01, `${name}: after a tap: ${JSON.stringify(s6)}`);
   await stroke(195, 300, 197, 480); const s7 = await state(); need(Math.abs(s7.ph - s6.ph) > 0.1 && Math.abs(s7.x - s6.x) < 0.01, `${name}: a drag down Read did not orbit: ${JSON.stringify(s7)}`);
+  await stroke(330, 420, 110, 420); const s8 = await state(); need(s7.pressed === 'false' && Math.abs(s8.th - s7.th) > 0.1 && Math.abs(s8.x - s7.x) < 0.01, `${name}: out of Read, a sideways drag did not orbit: ${JSON.stringify(s8)}`);
   await p.evaluate(() => __book.goView('room', true)); await settle(p); const a = await state(); await stroke(330, 420, 110, 420); const z = await state(); need(Math.abs(z.th - a.th) > 0.1 && Math.abs(z.x - a.x) < 0.01, `${name}: a drag in Room did not orbit: ${JSON.stringify(z)}`);
   await p.evaluate(() => __book.goView('top', true)); await settle(p); const t0 = await state(); await tap(250, 420); await p.waitForFunction(k => __book.target !== k, t0.turn, { timeout: 10000 }); const t1 = await state(); need(t1.view === 'top' && t1.pressed === 'false' && await p.evaluate(() => document.querySelector('[data-v=top]').getAttribute('aria-pressed')) === 'true', `${name}: a tap in Top lost the view`);
   if (errs.length) fails.push(`${name} phone: ${errs[0]}`);
