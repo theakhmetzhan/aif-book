@@ -1,21 +1,31 @@
 // The office at night, heard from the desk: light rain outside, drops ticking on the pane, thunder far off now and
-// then, the desk clock, and the book's card pages. Kept sparse on purpose: a quiet room is what makes the rain read.
-// Recordings in public/audio (see CREDITS.md); the pane ticks and the cover's thump are synthesized.
+// then, the desk clock, and the book's pages. Kept sparse on purpose: a quiet room is what makes the rain read.
+// Recordings in public/audio (see CREDITS.md); the pane ticks are synthesized.
 // Units are centimetres, like the scene. Every public method is safe to call before unlock() or without audio.
 import * as THREE from 'three';
 
-const FILES = ['rain', 'thunder1', 'thunder2', 'thunder3', 'thunder4', 'page1', 'page2', 'page3', 'tick', 'tock'];
+const FILES = ['rain', 'thunder1', 'thunder2', 'thunder3', 'thunder4', 'page', 'tick', 'tock'];
 
 const dB = d => Math.pow(10, d / 20);
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 
-// Pre-panner levels. The panners then attenuate by distance (inverse law, ref/rolloff per source below).
+// Levels going into each place below.
 const LEVEL = {
   rain: dB(-10), drops: dB(-33),
   tick: dB(-17),
-  page: dB(-17), cover: dB(-12), thump: dB(-17),
+  page: dB(-13),
   thunder: dB(-9), reverb: dB(-11),
 };
+
+// Where things are heard. Rain and thunder come through the window, off to the right, and stay there whatever the camera does.
+const WINDOW = { pan: 0.4, gain: dB(-3) };
+// The clock and the book keep a gentle sense of place: `gain` in dB from `ref` cm, 3 dB per doubling of distance, held within lo..hi of that;
+// `pan` is as far as they go to one side. FOLLOW is how slowly they get there: a time constant in seconds, then a top speed in dB and in pan per second.
+const PLACE = {
+  clock: { gain: -15.5, ref: 120, lo: -3, hi: 6, pan: 0.6 },
+  book: { gain: -7.5, ref: 70, lo: -3, hi: 3, pan: 0.35 },
+};
+const FOLLOW = { tau: 1.2, dB: 3, pan: 0.25 };
 
 // equal-power crossfade curves
 const N = 128, FADE_IN = new Float32Array(N), FADE_OUT = new Float32Array(N);
@@ -29,8 +39,8 @@ function mulberry32(seed) {
 export class Ambience {
   /**
    * @param {object} o
-   * @param {THREE.Camera} o.camera   the listener rides on it
-   * @param {object} o.positions      { clock, book, window } in world cm (Vector3 or {x,y,z})
+   * @param {THREE.Camera} o.camera   the clock and the book are placed from it
+   * @param {object} o.positions      { clock, book } in world cm (Vector3 or {x,y,z})
    * @param {boolean} [o.enabled=true]
    * @param {string} [o.baseUrl]      where the mp3s live (defaults to <vite base>/audio/)
    * @param {BaseAudioContext} [o.context]  e.g. an OfflineAudioContext for rendering tests
@@ -41,9 +51,8 @@ export class Ambience {
     const v = (p, x, y, z) => new THREE.Vector3(p?.x ?? x, p?.y ?? y, p?.z ?? z);
     const P = positions || {};
     this.camera = camera;
-    this.pos = {
-      clock: v(P.clock, 52, 6, -32), book: v(P.book, 0, 2, 0), window: v(P.window, 160, 110, 60),
-    };
+    this.pos = { clock: v(P.clock, 52, 6, -32), book: v(P.book, 0, 2, 0) };
+    this._v = new THREE.Vector3(); this._right = new THREE.Vector3();
     this._enabled = enabled !== false;
     this._ctxOpt = context;
     this._now = typeof now === 'function' ? now : () => Date.now();
@@ -52,7 +61,7 @@ export class Ambience {
     this._base = base;
     this._r = mulberry32(seed ?? (Math.random() * 2 ** 32));
     this._buf = {}; this._loops = []; this._pending = new Set(); this._groups = {};
-    this._pageLast = -1; this._acc = 0;
+    this._acc = 0;
     this.ready = Promise.resolve();
     this._onVis = e => this._safe(() => (e?.type === 'pagehide' ? this._sleep(0.05) : this._visibility()));
     this._kick = () => this._safe(() => this._resume());
@@ -72,7 +81,6 @@ export class Ambience {
       this._ctx = ctx;
       this._offline = typeof OfflineAudioContext !== 'undefined' && ctx instanceof OfflineAudioContext;
       try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* older Safari */ }
-      THREE.AudioContext.setContext(ctx);
       this._build();
       const t = ctx.currentTime, g = this._master.gain;
       g.setValueAtTime(0, t); this._target = 0;
@@ -99,35 +107,22 @@ export class Ambience {
     this._safe(() => { if (this._enabled) this._wake(); else this._sleep(0.5); });
   }
 
-  /** The book's sheet events: a sheet leaving its stack ('lift') or settling on one ('land'). A page is one quiet rustle
-   *  while it is in the air; a board sweeps lower and heavier, and thumps as it lands. */
-  sheet({ type, sheet, board } = {}) {
-    this._sheets ??= {}; // the rustle playing for each sheet in the air
-    this._early = null; // a rustle still waiting on its recording is stale once anything else happens, heard or not
+  /** The book's sheet events: a sheet leaving its stack ('lift') or settling on one ('land'). Pages and covers alike make the
+   *  one sound, exactly the same every time: it starts as a sheet lifts, and gives way when the next one lifts, so a fast run of pages stays quiet. */
+  sheet({ type, sheet } = {}) {
+    this._early = null; // a turn still waiting on its recording is stale once anything else happens, heard or not
     this._safe(() => {
       if (!this._live()) return;
-      const now = this._ctx.currentTime, g = this._sheets[sheet];
-      if (g) { g.gain.setTargetAtTime(0, now, type === 'land' ? 0.05 : 0.02); delete this._sheets[sheet]; }
-      if (type === 'lift') { this._sheets[sheet] = this._turn(board); if (!this._sheets[sheet]) this._early = { sheet, board }; } // recordings still decoding: start once they arrive
-      else if (type === 'land' && board) this._one(this._bank.thump[Math.floor(this._r() * this._bank.thump.length)], now, 0.9 + this._r() * 0.1, this._grp('page', this._spots.book), LEVEL.thump);
+      const t = this._turning;
+      if (t && (type === 'lift' || t.sheet === sheet)) { t.g.gain.setTargetAtTime(0, this._ctx.currentTime, 0.05); this._turning = null; }
+      if (type === 'lift') { this._turning = this._turn(sheet); if (!this._turning) this._early = { sheet }; } // recording still decoding: start once it arrives
     });
   }
 
-
-  _turn(board) {
-    if (!this._live()) return null;
-    const ctx = this._ctx, r = this._r, t = ctx.currentTime + 0.005;
-    const names = ['page1', 'page2', 'page3'].filter(n => this._buf[n]);
-    if (!names.length) return null;
-    let i = Math.floor(r() * names.length); if (names.length > 1 && i === this._pageLast) i = (i + 1) % names.length; this._pageLast = i;
-    const b = this._buf[names[i]], rate = (board ? 0.8 : 1) * (1 + (r() - 0.5) * 0.04);
-    b.__onset ??= onset(b);
-    // from the recording's first rustle, so the sound starts with the motion; soft-topped, and for a board lower and fuller
-    const tone = board ? this._biquad('lowshelf', 220, 0.7, 4) : this._biquad('lowpass', 5200, 0.6);
-    const g = this._gain(board ? LEVEL.cover : LEVEL.page);
-    this._one(b, t, rate, tone, null, Math.max(0, b.__onset - 0.03));
-    tone.connect(g).connect(this._grp('page', this._spots.book));
-    return g;
+  _turn(sheet) {
+    const b = this._buf.page; if (!b || !this._live()) return null;
+    b.__onset ??= onset(b); // the file opens on a few hundredths of a second of silence
+    return { sheet, g: this._one(b, this._ctx.currentTime + 0.005, 1, this._grp('page', this._spots.book), LEVEL.page, Math.max(0, b.__onset - 0.03)) };
   }
 
   /** Lightning just flashed distanceKm away: the thunder arrives distance / 0.343 s later. */
@@ -155,10 +150,9 @@ export class Ambience {
   update(dt = 1 / 60) {
     if (!this._ctx || this._dead) return;
     this._safe(() => {
-      const ctx = this._ctx;
-      if (this._offline || ctx.state === 'running') this.listener.updateMatrixWorld(true);
+      this._follow(dt);
       this._acc += dt;
-      if (this._acc > 0.1) { this._acc = 0; this._pump(); }
+      if (this._acc > 0.1) { this._acc = 0; this._pump(); this._place(); }
     });
   }
 
@@ -166,7 +160,7 @@ export class Ambience {
     this._dead = true; clearInterval(this._timer);
     if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', this._onVis);
     if (typeof window !== 'undefined') { removeEventListener('pagehide', this._onVis); removeEventListener('pageshow', this._onVis); removeEventListener('pointerdown', this._kick); removeEventListener('keydown', this._kick); }
-    try { this.listener?.removeFromParent(); if (!this._offline) this._ctx?.close(); } catch { /* already gone */ }
+    try { if (!this._offline) this._ctx?.close(); } catch { /* already gone */ }
   }
 
   // ------------------------------------------------------------------ plumbing
@@ -184,7 +178,7 @@ export class Ambience {
   /** Mute everything but these groups (for rendering stems). */
   _solo(names) { for (const g of Object.values(this._groups)) g.gain.value = names.includes(g.__group) ? 1 : 0; this._soloed = names; }
   _track(s, nodes = []) { this._pending.add(s); s.onended = () => { this._pending.delete(s); try { s.disconnect(); nodes.forEach(n => n.disconnect()); } catch { /* fine */ } }; }
-  /** One-shot buffer at time t. Returns nothing; connects to dest (optionally through a gain). */
+  /** One-shot buffer at time t. Connects to dest, optionally through a gain, which it returns. */
   _one(buf, t, rate = 1, dest, gain, offset = 0) {
     if (!buf || !dest) return;
     const ctx = this._ctx, s = ctx.createBufferSource(); s.buffer = buf; s.playbackRate.value = rate;
@@ -192,6 +186,7 @@ export class Ambience {
     if (gain != null) { g = this._gain(gain); s.connect(g); out = g; }
     out.connect(dest);
     s.start(Math.max(t, ctx.currentTime), offset); this._track(s, g ? [g] : []);
+    return g;
   }
   _ramp(to, dur) { const g = this._master.gain, t = this._ctx.currentTime; this._target = to; g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(to, t + dur); }
 
@@ -202,45 +197,55 @@ export class Ambience {
     clearTimeout(this._susT);
     this._susT = setTimeout(() => this._safe(() => {
       for (const s of this._pending) { try { s.stop(); } catch { /* not started */ } }
-      this._pending.clear(); this._tickSec = null; this._attach(false);
+      this._pending.clear(); this._tickSec = null;
       this._ctx.suspend?.().catch(() => {});
     }), fade * 1000 + 80);
   }
   _wake() {
     if (!this._ctx || this._dead || !this._enabled || (!this._offline && document.hidden)) return;
-    clearTimeout(this._susT); this._attach(true);
+    clearTimeout(this._susT);
     if (!this._offline && this._ctx.state !== 'running') this._ctx.resume?.().catch(() => {});
     if (this._target !== 1) this._ramp(1, 0.5);
   }
   /** Only nudge a context the browser paused (iOS interruptions); never touches the fades. */
   _resume() { if (this._ctx && !this._offline && this._enabled && !document.hidden && this._ctx.state !== 'running' && this._ctx.state !== 'closed') this._ctx.resume?.().catch(() => {}); }
   _visibility() { if (document.hidden) this._sleep(0.12); else this._wake(); }
-  /** The listener rides the camera only while the context runs: a suspended context never prunes the position ramps
-   *  three schedules on every rendered frame, so they would pile up for as long as the sound is off. */
-  _attach(on) {
-    const L = this.listener; if (!L) return;
-    if (on && this.camera?.add && L.parent !== this.camera) { this.camera.add(L); L.updateMatrixWorld(true); }
-    else if (!on && L.parent) L.removeFromParent();
+  /** Where the camera would put a source: how far to one side, and how many dB from its level at `ref`. */
+  _heard(name) {
+    const cam = this.camera; if (!cam) return { pan: 0, dB: 0 };
+    const P = PLACE[name], v = this._v.copy(this.pos[name]).sub(cam.position), d = Math.max(v.length(), 1);
+    return { pan: P.pan * v.dot(this._right.set(1, 0, 0).applyQuaternion(cam.quaternion)) / d, dB: clamp(3 * Math.log2(P.ref / d), P.lo, P.hi) };
+  }
+  /** The clock and the book drift toward where the camera puts them, however fast it moves. */
+  _follow(dt) {
+    const k = 1 - Math.exp(-dt / FOLLOW.tau), step = (a, b, top) => a + clamp((b - a) * k, -top * dt, top * dt);
+    for (const name in PLACE) {
+      const s = this._at[name], h = this._heard(name);
+      s.pan = step(s.pan, h.pan, FOLLOW.pan); s.dB = step(s.dB, h.dB, FOLLOW.dB);
+    }
+  }
+  /** Hands the drift to the audio thread, ten times a second and only when it has moved: a suspended context would keep every event it was given. */
+  _place() {
+    const ctx = this._ctx; if (!this._offline && ctx.state !== 'running') return;
+    const ease = (param, v) => { if (!(Math.abs(param.__to - v) < 1e-3)) { param.__to = v; param.setTargetAtTime(v, ctx.currentTime, 0.05); } };
+    for (const name in PLACE) { const s = this._at[name], n = this._spots[name]; ease(n.__pan, s.pan); ease(n.__gain, dB(PLACE[name].gain + s.dB)); }
   }
 
   _load() {
     const ctx = this._ctx;
     const decode = ab => new Promise((res, rej) => { const p = ctx.decodeAudioData(ab, res, rej); if (p?.then) p.then(res, rej); });
     return Promise.all(FILES.map(n => fetch(this._base + n + '.mp3').then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(n)))).then(decode)
-      .then(b => { this._buf[n] = b; const e = this._early; if (e && n.startsWith('page')) this._safe(() => { this._early = null; this._sheets[e.sheet] = this._turn(e.board); }); }).catch(() => { /* that sound stays out */ })));
+      .then(b => { this._buf[n] = b; const e = this._early; if (e && n === 'page') this._safe(() => { this._early = null; this._turning = this._turn(e.sheet); }); }).catch(() => { /* that sound stays out */ })));
   }
 
   // ------------------------------------------------------------------ the graph
 
   _build() {
     const ctx = this._ctx;
-    const L = this.listener = new THREE.AudioListener();
-    this._attach(this._enabled || this._offline);
     // master: fade → rumble cut → gentle glue → limiter → soft ceiling. Chrome and Safari add automatic makeup gain
     // to DynamicsCompressor (about +5 dB here, +3.4 dB on the limiter); the trims take it back out, so the limiter
     // starts working near -5 dBFS at the output and the clipper never lets anything past about -4 dBFS.
-    L.gain.disconnect();
-    this._master = L.gain; this._in = L.getInput();
+    this._master = this._in = this._gain(1);
     const hp = this._biquad('highpass', 24, 0.6);
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -18; comp.knee.value = 10; comp.ratio.value = 2; comp.attack.value = 0.02; comp.release.value = 0.4;
@@ -255,20 +260,17 @@ export class Ambience {
     this._rev = ctx.createConvolver(); this._rev.buffer = this._ir(1.3, 0.55);
     this._rev.connect(this._gain(LEVEL.reverb)).connect(this._in);
     this._bank = this._makeBanks();
-    // where things are: ref distance and rolloff in cm
-    const spot = (p, ref, roll, hrtf, send) => {
-      const pn = ctx.createPanner(); pn.panningModel = hrtf ? 'HRTF' : 'equalpower'; pn.distanceModel = 'inverse';
-      pn.refDistance = ref; pn.rolloffFactor = roll; pn.maxDistance = 1e5;
-      if (pn.positionX) { pn.positionX.value = p.x; pn.positionY.value = p.y; pn.positionZ.value = p.z; } else pn.setPosition(p.x, p.y, p.z);
-      const input = this._gain(1); input.connect(pn).connect(this._in);
+    // where things are: a level and a side, the room's reverb taken before either
+    const spot = (gain, pan, send) => {
+      const input = this._gain(1), out = this._gain(gain), pn = ctx.createStereoPanner(); pn.pan.value = pan;
+      input.connect(out).connect(pn).connect(this._in);
       if (send) input.connect(this._gain(send)).connect(this._rev);
+      input.__gain = out.gain; input.__pan = pn.pan;
       return input;
     };
-    this._spots = {
-      window: spot(this.pos.window, 120, 0.6, false, 0.3),
-      clock: spot(this.pos.clock, 20, 1, true, 0.12),
-      book: spot(this.pos.book, 30, 1, true, 0.12),
-    };
+    this._at = { clock: this._heard('clock'), book: this._heard('book') }; // where the clock and the book are heard right now; _follow moves these
+    const place = (name, send) => spot(dB(PLACE[name].gain + this._at[name].dB), this._at[name].pan, send);
+    this._spots = { window: spot(WINDOW.gain, WINDOW.pan, 0.3), clock: place('clock', 0.12), book: place('book', 0.12) };
     const now = ctx.currentTime;
 
     // rain: one bed from the recording once it is decoded (_startFiles); the level wanders and swells after thunder.
@@ -387,8 +389,6 @@ export class Ambience {
     return {
       // a raindrop hitting the pane
       drop: bank(10, () => make(0.04, (d, n) => { modes(d, n, 0, [[2400 + r() * 3200, 0.35, 0.0035, r() * 6]], 1, 0.0008, 0.6); })),
-      // a board settling flat: low and soft
-      thump: bank(3, () => make(0.16, (d, n) => { modes(d, n, 0.002, [[65 + r() * 25, 0.6, 0.035, 0], [150 + r() * 60, 0.25, 0.02, 0]], 1, 0.02, 0.025); })),
     };
   }
 
