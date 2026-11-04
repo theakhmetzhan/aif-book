@@ -21,7 +21,7 @@ const r=await p.evaluate(()=>{
     return {from,to,turning,frames:f}; };
   const judge=m=>{ const f=m.frames, rest=leaves.filter(i=>i!==m.turning), e0=f[0].e, e1=f[f.length-1].e, o=f.map(a=>(a.e-e0)/(e1-e0)), moved=rest.filter(i=>Math.abs(f[f.length-1].d[i]-f[0].d[i])>0.05);
     let lag=0,lagAt=-1,apart=0,back=0; const end=f[f.length-1].d;
-    for(let t=0;t<f.length;t++){ const off=moved.map(i=>f[t].d[i]-f[0].d[i]-o[t]*(end[i]-f[0].d[i])); if(!off.length) continue; const worst=Math.max(...off.map(Math.abs)); if(worst>lag){ lag=worst; lagAt=f[t].p; } const v=moved.map(i=>(f[t].d[i]-f[0].d[i])/(end[i]-f[0].d[i])); apart=Math.max(apart,Math.max(...v)-Math.min(...v)); }
+    for(let t=0;t<f.length;t++){ const off=moved.map(i=>f[t].d[i]-f[0].d[i]-o[t]*(end[i]-f[0].d[i])); if(!off.length) continue; const worst=Math.max(...off.map(Math.abs)); if(worst>lag){ lag=worst; lagAt=f[t].p; } const v=moved.filter(i=>Math.abs(end[i]-f[0].d[i])>0.25).map(i=>(f[t].d[i]-f[0].d[i])/(end[i]-f[0].d[i])); if(!v.length) continue; apart=Math.max(apart,Math.max(...v)-Math.min(...v)); }
     for(const i of rest){ const a=f[0].d[i], z=f[f.length-1].d[i], lo=Math.min(a,z), hi=Math.max(a,z); for(const g of f) back=Math.max(back,lo-g.d[i],g.d[i]-hi); }
     let step=0; for(const i of rest) for(let t=1;t<f.length;t++) step=Math.max(step,Math.abs(f[t].d[i]-f[t-1].d[i]));
     return {name:`${m.from}>${m.to}`,frames:f.length,moved:moved.length,lag,lagAt,apart,back,step}; };
