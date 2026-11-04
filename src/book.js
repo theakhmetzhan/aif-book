@@ -55,6 +55,7 @@ export class Book {
     lg.fillStyle = '#fff'; lg.fillRect(0, 0, 4, 256); for (let y = 0; y < 256; y += 2 + Math.floor(rnd() * 5)) { lg.fillStyle = `rgba(60,42,20,${0.12 + rnd() * rnd() * 0.5})`; lg.fillRect(0, y, 4, 1 + Math.floor(rnd() * 1.4)); }
     const lt = new THREE.CanvasTexture(lc); lt.colorSpace = THREE.SRGBColorSpace; lt.wrapS = lt.wrapT = THREE.RepeatWrapping; lt.anisotropy = renderer.capabilities.getMaxAnisotropy();
     const edgeMat = new THREE.MeshStandardMaterial({ map: lt, color: new THREE.Color(T.paper).multiplyScalar(0.86), roughness: 0.95, side: THREE.DoubleSide });
+    // the end of a leaf at the spine never shows: it runs on into the block's ends and the crease, so it is not drawn, or a hair of it would show through them
     const leafUV = (g, h, y0) => { const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, (y0 + uv.getY(i) * h) / LEAVES); return g; }; // every edge takes its lines from its height in the shut book, so they run on from one sheet to the next
     const sideMat = new THREE.MeshStandardMaterial({ color: T.clothSide, roughness: 0.8 });
     const hingeMat = new THREE.MeshStandardMaterial({ color: '#7a4a30', roughness: 0.9, emissive: '#7a4a30', emissiveIntensity: 0.12 }); // the endpaper running over the board's spine edge into the joint
@@ -83,7 +84,7 @@ export class Book {
         s.mesh = mesh; if (inner === 'bot') { s.top = BT; s.bot = 0; } else { s.top = 0; s.bot = -BT; }
       } else {
         pivot.add(faceMesh(ft.map, false, ST / 2), faceMesh(bt.map, true, -ST / 2));
-        const edge = new THREE.Mesh(new THREE.BoxGeometry(PW, ST, PH), [edgeMat, edgeMat, hidden, hidden, edgeMat, edgeMat]); s.edge = edge; edge.position.x = G0 + PW / 2; edge.castShadow = true; pivot.add(edge);
+        const edge = new THREE.Mesh(new THREE.BoxGeometry(PW, ST, PH), [edgeMat, hidden, hidden, hidden, edgeMat, edgeMat]); s.edge = edge; edge.position.x = G0 + PW / 2; edge.castShadow = true; pivot.add(edge);
         s.top = ST / 2; s.bot = -ST / 2;
       }
       // pop-ups glued to either face of this sheet
@@ -133,7 +134,7 @@ export class Book {
     // flush with the page edges and just overlapping both pages: an inset or a slit leaves lit paper thinner than a pixel,
     // which shimmers along the block whenever the view moves
     for (let k = 1; k < N; k++) {
-      const g = this.gaps[k] + 0.002, m = new THREE.Mesh(leafUV(new THREE.BoxGeometry(PW, g, PH), g, this.sheets[k].yR + this.sheets[k].top - 0.001), [edgeMat, edgeMat, hidden, hidden, edgeMat, edgeMat]);
+      const g = this.gaps[k] + 0.002, m = new THREE.Mesh(leafUV(new THREE.BoxGeometry(PW, g, PH), g, this.sheets[k].yR + this.sheets[k].top - 0.001), [edgeMat, hidden, hidden, hidden, edgeMat, edgeMat]);
       m.position.x = G0 + PW / 2; m.castShadow = true; m.matrixAutoUpdate = false; // no shadow lands on them: a shadow's edge grazing these faces breaks into diagonal bands
       this.sheets[k].pivot.add(m); this.fillers.push({ k, m, g: this.gaps[k] });
     }
@@ -146,8 +147,9 @@ export class Book {
     for (const o of [0, 1]) for (let j = 0; j <= M; j++) for (let c = 0; c <= fan; c++) { const v = cap(o, j, c) * 2; ruv[v] = c / fan; }
     const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.BufferAttribute(rp, 3)); rg.setAttribute('uv', new THREE.BufferAttribute(ruv, 2)); rg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(rp.length).fill(1), 3)); rg.setIndex(ri); rg.setAttribute('normal', new THREE.BufferAttribute(rp.map((_, i) => i % 3 === (i < (M + 1) * 6 ? 1 : 2) ? 1 : 0), 3)); rg.addGroup(0, 6 * M, 0); // the crease takes the page's light, not the window's
      rg.addGroup(6 * M, 12 * M * fan, 1);
-    this.back = new THREE.Mesh(rg, [new THREE.MeshStandardMaterial({ color: new THREE.Color(T.paper).multiplyScalar(0.66), vertexColors: true, roughness: 0.9, side: THREE.DoubleSide, envMapIntensity: 0.15 }), edgeMat]);
-    this.back.castShadow = true; this.back.frustumCulled = false; this.group.add(this.back);
+    this.back = new THREE.Mesh(rg, [new THREE.MeshStandardMaterial({ color: new THREE.Color(T.paper).multiplyScalar(0.8), vertexColors: true, roughness: 0.9, side: THREE.DoubleSide, envMapIntensity: 0.15 }), hidden]);
+    // the crease takes the shadows the page beside it takes; the block's ends do not: a shadow's edge grazing them breaks into bands
+    const blockEnds = new THREE.Mesh(rg, [hidden, edgeMat]); this.back.castShadow = blockEnds.castShadow = true; this.back.receiveShadow = true; this.back.frustumCulled = blockEnds.frustumCulled = false; this.group.add(this.back, blockEnds);
     this.events = {}; // events.sheet({ type: 'lift' | 'land', sheet, board }) as a sheet leaves or reaches a stack
     // the cloth of the spine: a stiff strip between the boards, the joints either side of it flexing as they swing
     const sc = document.createElement('canvas'); sc.width = 1024; sc.height = 256; clothFill(sc.getContext('2d'), 1024, 256, T.cloth);
@@ -303,7 +305,7 @@ export class Book {
     // every line between is a blend of those, by way of one line standing up from the spine to the crease: blends of lines that do not cross cannot cross
     for (let i = 0; i < N - 1; i++) { const A = leaf[i], B = leaf[i + 1], { curve, cut, vx, vy } = seam[i], ra = root(S[i]), rb = root(S[i + 1]), uva = shut(S[i]), uvb = shut(S[i + 1]), [wx, wy] = spineAt(ra + (rb - ra) * cut), cx = A.bx + (B.bx - A.bx) * cut, cy = A.by + (B.by - A.by) * cut, mx = cx + (wx - cx) * curve, my = cy + (vy - cy) * curve;
       for (let m = 0; m <= seg; m++) { const t = m / seg, j = i * seg + m, [x, y, deep] = crest[j], [ox, oy] = spineAt(ra + (rb - ra) * t), near = t < cut ? A : B, w = t < cut ? t / cut : (1 - t) / (1 - cut);
-        const g = 1 - 0.85 * curve * deep ** 1.2; for (const e of [0, 1]) tone.setXYZ(j * 2 + e, g, g, g); // paper darkens as it goes down into the crease, where the page beside it shades it
+        const g = 1 - 0.6 * curve * deep ** 1.2; for (const e of [0, 1]) tone.setXYZ(j * 2 + e, g, g, g); // paper darkens as it goes down into the crease, where the page beside it shades it
         const lap = 0.006 * curve * (1 - deep) ** 4; Q.setXYZ(j * 2, x, y + lap, PH / 2); Q.setXYZ(j * 2 + 1, x, y + lap, -PH / 2); // the arc starts on the page, not under it, or the page's edge shows along the join
         const bx = near.bx + (mx - near.bx) * w, by = near.by + (my - near.by) * w, ex = x + near.rx * (1 - w), ey = y + near.ry * (1 - w);
         for (let c = 0; c <= fan; c++) { const v = c / fan, px = (1 - v) ** 2 * ox + 2 * v * (1 - v) * bx + v * v * ex, py = (1 - v) ** 2 * oy + 2 * v * (1 - v) * by + v * v * ey; Q.setXYZ(cap(0, j, c), px, py, z + j * 1e-4); Q.setXYZ(cap(1, j, c), px, py, -z - j * 1e-4); for (const o of [0, 1]) UV.setY(cap(o, j, c), uva + (uvb - uva) * t); } } } // each leaf a hair proud of the last, so none shares a plane with its neighbour
