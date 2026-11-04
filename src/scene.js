@@ -100,7 +100,7 @@ function desk(scene, out, surf) {
   let top, side;
   if (surf) { top = surf.deskWood({ w: 190, d: 92 }); side = surf.deskWood({ w: 190, d: 92, tint: '#6f5a50' }); }
   else { const map = woodTexture(1024, 512); map.wrapS = map.wrapT = THREE.RepeatWrapping;
-    top = new THREE.MeshPhysicalMaterial({ map, roughness: 0.48, clearcoat: 0.55, clearcoatRoughness: 0.32, metalness: 0 });
+    top = new THREE.MeshPhysicalMaterial({ map, roughness: 0.48, clearcoat: 0.4, clearcoatRoughness: 0.45, specularIntensity: 0.5, metalness: 0 });
     side = new THREE.MeshPhysicalMaterial({ map, color: '#9a8a80', roughness: 0.5, clearcoat: 0.4, clearcoatRoughness: 0.35 }); }
   // the varnish mirrors the real lamp only: the environment's lamp stand-in sits off to the left, so across a 190 cm top it
   // outlined the left edges alone. (three ignores envMapIntensity on materials that fall back to scene.environment.)

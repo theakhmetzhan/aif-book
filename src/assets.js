@@ -170,9 +170,9 @@ export async function loadSurfaces(renderer) {
         map: tiled(wDiff, rx, ry, rot), color: tint,
         normalMap: tiled(wNor, rx, ry, rot), normalScale: new THREE.Vector2(0.45 / 3, 0.45 / 3),
         roughnessMap: tiled(wRough, rx, ry, rot), roughness: 0.75, metalness: 0,
-        clearcoat: 1, clearcoatRoughness: 1, clearcoatRoughnessMap: tiled(wear, w / WEAR_TILE, d / WEAR_TILE), // 34..64/255 -> ~0.13..0.25
+        clearcoat: 0.7, clearcoatRoughness: 1.4, clearcoatRoughnessMap: tiled(wear, w / WEAR_TILE, d / WEAR_TILE), // 34..64/255 -> ~0.19..0.35: the lamp is a point here, its shade's mouth is wide
         clearcoatNormalMap: tiled(pores, w / 12, d / 12), clearcoatNormalScale: new THREE.Vector2(0.07, 0.07),
-        specularIntensity: 0.6,
+        specularIntensity: 0.3,
       });
     },
     /** Desk blotter leather, 'green' (default) or 'oxblood'. */
