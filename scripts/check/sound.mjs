@@ -6,7 +6,7 @@ import puppeteer from 'puppeteer-core';
 import fs from 'fs';
 const url = process.env.URL || 'http://localhost:5181/aif-book/', base = new URL(url).pathname;
 const b = await puppeteer.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: 'new', protocolTimeout: 900000 });
-const pg = await b.newPage(); const errs = []; pg.on('pageerror', e => errs.push(e.message));
+const pg = await b.newPage(); const errs = []; pg.on('pageerror', e => errs.push(e.message)); pg.on('console', m => m.text().startsWith('[audio]') && errs.push(m.text())); // the sound swallows its own errors and goes quiet
 await pg.goto(url + 'audio/CREDITS.md');
 const r = await pg.evaluate(async base => {
   const { Ambience } = await import(base + 'src/audio.js'), { CameraRig } = await import(base + 'src/controls.js');
