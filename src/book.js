@@ -148,7 +148,7 @@ export class Book {
     for (const o of [0, 1]) for (let j = 0; j <= M; j++) for (let c = 0; c <= fan; c++) { const v = cap(o, j, c) * 2; ruv[v] = c / fan; }
     const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.BufferAttribute(rp, 3)); rg.setAttribute('uv', new THREE.BufferAttribute(ruv, 2)); rg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(rp.length).fill(1), 3)); rg.setIndex(ri); rg.setAttribute('normal', new THREE.BufferAttribute(rp.map((_, i) => i % 3 === (i < (M + 1) * 6 ? 1 : 2) ? 1 : 0), 3)); rg.addGroup(0, 6 * M, 0); // the crease takes the page's light, not the window's
      rg.addGroup(6 * M, 12 * M * fan, 1);
-    this.hinge = [0.8, 0.76, 0.71]; // the endpaper, as a tone of the crease's paper: the crease takes little of the room's cooler light, so this is paler than the stock
+    this.hinge = [0.68, 0.66, 0.66]; // the endpaper, as a tone of the crease's paper: the crease takes little of the room's light, so it has to be paler than the stock to look the same
     this.back = new THREE.Mesh(rg, [new THREE.MeshStandardMaterial({ color: new THREE.Color(T.paper).multiplyScalar(0.9), vertexColors: true, roughness: 0.9, side: THREE.DoubleSide, envMapIntensity: 0.15 }), hidden]);
     // the crease takes the shadows the page beside it takes; the block's ends do not: a shadow's edge grazing them breaks into bands
     const blockEnds = new THREE.Mesh(rg, [hidden, edgeMat]); this.back.castShadow = blockEnds.castShadow = true; this.back.receiveShadow = true; this.back.frustumCulled = blockEnds.frustumCulled = false; this.group.add(this.back, blockEnds);

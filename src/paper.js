@@ -38,10 +38,7 @@ export function grainTile(size = 512, seed = 1) {
 
 // fill a rect with paper base + grain (overlay)
 export function paperFill(g, w, h, base = '#f1e8d6', strength = 0.55, seed = 1) {
-  g.fillStyle = base; g.fillRect(0, 0, w, h); paperGrain(g, w, h, strength, seed);
-}
-// the paper's grain, over whatever is there: laid over print, the fibres run through the ink
-export function paperGrain(g, w, h, strength = 0.55, seed = 1) {
+  g.fillStyle = base; g.fillRect(0, 0, w, h);
   g.save(); g.globalCompositeOperation = 'overlay'; g.globalAlpha = strength;
   g.fillStyle = g.createPattern(grainTile(512, seed), 'repeat'); g.fillRect(0, 0, w, h); g.restore();
 }
@@ -68,14 +65,17 @@ export function star8Points(R, innerRatio = 0.765) {
   const pts = []; for (let k = 0; k < 16; k++) { const a = -Math.PI / 2 + k * Math.PI / 8; const r = k % 2 ? R * innerRatio : R; pts.push([Math.cos(a) * r, Math.sin(a) * r]); } return pts;
 }
 
-// the inside of a board, over what is printed on its endpaper: the cover's cloth turned in over the three outer edges and mitred at the corners, and the paper pasted down
-// short of them, open at the spine edge, where it runs on into the joint
-export function pastedown(g, S, w, h, spine) {
+// the inside of a board: plain laid paper, the mould's wires only just pressed into it, pasted down over the cover's cloth. The cloth turns in over the three outer edges, mitred at
+// the corners, and the paper stops short of them; at the spine edge it runs on into the joint
+export function endpaper(g, S, w, h, spine) {
+  paperFill(g, w, h, T.endpaper, 0.16, 9);
+  const r = rng(13); g.fillStyle = 'rgba(70,50,30,.03)'; for (let y = 0; y < h; y += 0.09 * S) g.fillRect(0, y, w, 0.022 * S * (0.8 + r() * 0.4)); // the laid lines
+  g.fillStyle = 'rgba(70,50,30,.022)'; for (let x = 1.1 * S; x < w; x += 2.4 * S) g.fillRect(x, 0, 0.03 * S, h); // the chain lines across them
   const t = 0.3 * S, cut = 0.72 * S, sx = spine === 'left' ? 0 : w, fx = w - sx, d = sx ? 1 : -1, px = fx + d * t, cx = fx + d * cut; // how much cloth the paper leaves showing; where the cloth's cut edge lies under the paper; the spine and fore-edge sides; d runs in from the fore-edge
   const line = (pts, style, lw) => { g.strokeStyle = style; g.lineWidth = lw * S; g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.stroke(); };
   const fade = (x0, y0, x1, y1, rgba) => { const f = g.createLinearGradient(x0, y0, x1, y1); f.addColorStop(0, `rgba(${rgba})`); f.addColorStop(1, `rgba(${rgba.replace(/[^,]+$/, '0')})`); g.fillStyle = f; g.fillRect(0, 0, w, h); };
   // the paper takes the shape of that cut edge, a ridge the light only just finds, and dips as it leaves the board for the joint
-  for (const [o, style] of [[-0.015 * S, 'rgba(255,240,210,.09)'], [0.015 * S, 'rgba(40,20,8,.1)']]) line([[sx, cut + o], [cx + o, cut + o], [cx + o, h - cut + o], [sx, h - cut + o]], style, 0.03);
+  for (const [o, style] of [[-0.015 * S, 'rgba(255,240,210,.05)'], [0.015 * S, 'rgba(40,20,8,.055)']]) line([[sx, cut + o], [cx + o, cut + o], [cx + o, h - cut + o], [sx, h - cut + o]], style, 0.03);
   fade(sx, 0, sx - d * 0.7 * S, 0, '70,45,15,.3');
   g.save(); g.beginPath(); g.rect(0, 0, w, h); g.rect(Math.min(sx, px), t, w - t, h - 2 * t); g.clip('evenodd'); clothFill(g, w, h, T.cloth);
   for (const [x0, y0, x1, y1] of [[0, 0, 0, 0.1 * S], [0, h, 0, h - 0.1 * S], [fx, 0, fx + d * 0.1 * S, 0]]) fade(x0, y0, x1, y1, '255,205,170,.16'); // the cloth rounds over the board's edge
