@@ -28,6 +28,8 @@ for (const [name, type, opts] of [['WebKit', webkit, {}], ['Chromium', chromium,
     need(Math.max(...home) < 1e-9, `${tag}: a full turn changed the framing: ${home}`);
     const jump = await p.evaluate(async () => { const B = __book, r = B.rig; let worst = 0; for (const v of ['room', 'desk', 'board']) { B.goView(v, true); r.free(); let was = null; for (let i = 0; i <= 720; i++) { r.g.th = r.s.th = i / 720 * 2 * Math.PI; r.limit(); r.apply(); const c = B.cam.position.clone(); if (was) worst = Math.max(worst, c.distanceTo(was)); was = c; } } return worst; });
     need(jump < 30, `${tag}: a half-degree turn moved the eye ${jump.toFixed(1)}`); // from five metres out a half-degree is already some way: this is for the snap, which was over 200
+    const rear = await p.evaluate(async () => { const B = __book, r = B.rig, at = () => new Promise(f => setTimeout(() => f(B.cam.position.y), 900)); B.goView('room', true); r.free(); r.g.th = Math.PI; r.limit(); const a = await at(); r.g.ph -= 0.24; r.limit(); return Math.abs(await at() - a); });
+    need(rear > 1, `${tag}: with its back to the wall a tilt moved the eye ${rear.toFixed(3)}`);
     const snd = await p.evaluate(() => { const r = document.querySelector('.snd').getBoundingClientRect(); return { x: r.left, y: r.top }; });
     if (phone) need(snd.x < 40 && snd.y < 40, `${tag}: Sound is at ${snd.x}, ${snd.y}`);
     need(!errs.length, `${tag}: ${errs[0]}`); await c.close();

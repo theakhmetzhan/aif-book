@@ -37,8 +37,8 @@ export class CameraRig {
     const low = L.floor === undefined ? L.phiMax : Math.max(L.phiMax, Math.acos(clamp((L.floor - this.tg.y) / g.r, -1, 1))); // a view that looks level or up says how low the eye may go instead
     g.r = clamp(g.r, L.rMin, L.rMax); g.ph = clamp(g.ph, L.phiMin, low);
   }
-  // the eye goes all the way round. With its back to the wall there is only the dark room ahead, so the more it turns that way the more it looks down on the desk. This is how the state is seen, never the state: come round, and the framing asked for is still there
-  seen({ th, ph }, t) { const L = this.L, b = Math.max(0, -Math.cos(th)); return { y: Math.min(t.y, 70 - 66 * b), z: Math.max(t.z, L.box.min.z + (L.wall + L.room - L.box.min.z) * b), ph: Math.min(ph, 1.8 - 0.65 * b) }; }
+  // the eye goes all the way round. With its back to the wall there is only the dark room ahead, so the more it turns that way the more it looks down on the desk. This is an offset on how the state is seen, never the state: the hand still moves it one for one, and come round, the framing asked for is still there
+  seen({ th, ph }, t) { const L = this.L, b = Math.max(0, -Math.cos(th)), h = this.home ?? t; return { y: Math.max(L.box.min.y, t.y + (4 - h.y) * b), z: t.z + (L.wall + L.room - h.z) * b, ph: Math.max(L.phiMin, ph - 0.35 * b * (ph / 1.5) ** 2) }; }
   // how far back the eye can stand on this bearing before the wall stops it: the distance asked for comes back when the bearing lets it
   reach(st, t) { const { z, ph } = this.seen(st, t), back = -Math.sin(ph) * Math.cos(st.th), w = this.L.wall; return back > 1e-3 ? Math.max(2, (Math.max(z, w) - w + 60 * (1 - back)) / back) : Infinity; } // eases in over the turn, however near the wall the target stands; the eye's own stop at the wall does the rest
   // the hand takes over from a view's lens: back to the everyday one, the picture staying the same size
@@ -72,7 +72,7 @@ export class CameraRig {
   }
   zoom(f, cx, cy) { // f < 1 comes closer; aims toward the point under (cx, cy)
     const r0 = Math.min(this.g.r, this.reach(this.g, this.tg)), r1 = clamp(r0 * f, this.L.rMin, this.L.rMax); if (Math.abs(r1 - r0) < 1e-6 || f > 1 && r0 < this.g.r) return; // against the wall, closer starts from where the eye stands, and there is no further back
-    if (r1 < r0) { const hit = cx !== undefined && this.pick ? this.pick(cx, cy) : null; if (hit) this.tg.lerp(hit, 1 - r1 / r0); }
+    if (r1 < r0) { const hit = cx !== undefined && this.pick ? this.pick(cx, cy) : null; if (hit) { const v = this.seen(this.g, this.tg), k = 1 - r1 / r0; this.tg.x += (hit.x - this.tg.x) * k; this.tg.y += (hit.y - v.y) * k; this.tg.z += (hit.z - v.z) * k; } } // toward the point as seen, which is the point itself but for the turn to the wall
     else if (this.home) this.tg.lerp(this.home, Math.min(1, (1 - r0 / r1) * 1.6)); // pulling back drifts toward the view's own centre
     this.g.r = r1; this.limit(); this.speed = Math.max(this.speed, 0.85);
   }
