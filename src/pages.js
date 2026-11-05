@@ -240,9 +240,6 @@ export const FACES = {
       P.para('Each case opens one method: how an **agent** meets its world, how **search** follows a trail, how **local search** climbs toward better answers, and on to probability, learning and language models.', { indent: 0.6 });
       P.para('Every exhibit stands up from its page. At desk level the exhibits tell the story; lean over the book and the pages underneath give the full explanation. Drag to look around the desk, scroll or pinch to come closer, and click a page or press the arrow keys to turn it.', { indent: 0.6 });
       P.para('Every number in the exhibits was computed by running the algorithm the case describes.', { indent: 0.6 });
-      P.gap(0.4);
-      P.text('A. T.', P.x1, P.y, { font: `italic 400 ${0.36 * S}px ${SERIF}`, color: INK2, align: 'right' });
-      P.text('November 2026', P.x1, P.y + 0.5, { font: `italic 400 ${0.3 * S}px ${SERIF}`, color: INK2, align: 'right' });
     },
   },
   contents: {
