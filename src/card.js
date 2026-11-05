@@ -102,13 +102,6 @@ function paper(g, W, H, s) {
     g.fillStyle = sp; g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
   }
 }
-function coffeeRing(g, x, y, R) {
-  g.save();
-  g.strokeStyle = 'rgba(120,76,34,.10)'; g.lineWidth = 7; g.beginPath(); g.arc(x, y, R, 0.2, 5.6); g.stroke();
-  g.strokeStyle = 'rgba(120,76,34,.07)'; g.lineWidth = 2.5; g.beginPath(); g.arc(x + 3, y - 2, R - 9, 0.9, 6.0); g.stroke();
-  g.fillStyle = 'rgba(120,76,34,.035)'; g.beginPath(); g.arc(x, y, R - 4, 0, 7); g.fill();
-  g.restore();
-}
 const canvasOf = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
 const resampled = new WeakMap();
 function resample(img, dw, dh) {
@@ -173,7 +166,6 @@ export function drawCard(ctx, W, H, { qr, cover } = {}) {
   const g = ctx; g.save();
   g.setTransform(1, 0, 0, 1, 0, 0); paper(g, W, H, s);
   g.setTransform(s, 0, 0, s, ox, oy);
-  coffeeRing(g, 1872, 46, 112);
 
   // cover
   const cv = G.cover, ch = cv.h, cw = ch * COVER_ASPECT;
