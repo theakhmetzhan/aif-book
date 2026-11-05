@@ -1,9 +1,10 @@
 // Frame cost while navigating, in WebKit and Chromium, at a phone's window and pixel ratio with the app's mobile path on, and on a desktop window. A desktop machine stands in for a phone here: milliseconds are this machine's, so read them as before against after, never as a phone's numbers.
 // Everything is hooked from outside the app, so the same script measures any build. One route plays in every run: rest, drag, fly to Read, swipe, turn pages, fly to Desk, drag and pinch, Board, Top, Watch, Room.
-// Three passes of the route, because measuring disturbs: `time` hooks only the frame and its stages; `count` counts every GL call, upload and allocation; `gpu` waits for the GPU each time the kind of pass changes.
+// Three passes of the route, because measuring disturbs: `time` hooks only the frame and its stages; `count` counts every GL call, upload and allocation; `gpu` waits for the GPU each time the kind of pass changes. The GPU's clock follows its load, so `gpu` varies by a third from run to run: read it for shares.
+// `peak` is the number to compare builds by: Chromium with the display's limit off, dragging, frames as fast as they come, which holds to about 1% from run to run.
 // Then what a route cannot show, on the phone only: `read` goes through every spread and back and compares each first showing with the second; `bar` slides an address bar; `pace` holds frames to a slow device's rate and watches the resolution answer.
 // Only what does not depend on this machine can fail the check: draws, uploads, shadow maps drawn while the camera moves, copies held in memory, buffers remade, the resolution's answers. The same limits run against any build, so an older one is the control: it has to fail.
-// usage: URL=http://localhost:5181/aif-book/ node scripts/check/perf.mjs [out.json] [only=WebKit,Chromium] [pass=time,count,gpu,read,bar,pace] [against=before.json]
+// usage: URL=http://localhost:5181/aif-book/ node scripts/check/perf.mjs [out.json] [only=WebKit,Chromium] [pass=time,count,gpu,peak,read,bar,pace] [against=before.json]
 import { webkit, chromium } from 'playwright-core';
 import fs from 'fs';
 import { execSync } from 'child_process';
@@ -12,14 +13,14 @@ const CHROME = { executablePath: '/Applications/Google Chrome.app/Contents/MacOS
 const PHONE = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true }, DESK = { viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2 };
 const RUNS = [
   { name: 'WebKit phone', type: webkit, ctx: PHONE },
-  { name: 'WebKit phone small cores', type: webkit, ctx: PHONE, small: true }, // WebKit has no throttle: its processes at background priority run on the small cores, a little over half as fast here
+  { name: 'WebKit phone small cores', type: webkit, ctx: PHONE, small: true }, // WebKit has no throttle: its processes at background priority run on the small cores, a little over half as fast here. Its frames also stall for a fifth of a second at that priority, so only its CPU figures mean anything
   { name: 'Chromium phone', type: chromium, ctx: PHONE, launch: CHROME },
   { name: 'Chromium phone 4x', type: chromium, ctx: PHONE, launch: CHROME, slow: 4 },
   { name: 'Chromium phone 6x', type: chromium, ctx: PHONE, launch: CHROME, slow: 6 },
   { name: 'WebKit desktop', type: webkit, ctx: DESK },
   { name: 'Chromium desktop', type: chromium, ctx: DESK, launch: CHROME },
 ].filter(r => !opt('only') || opt('only').split(',').some(o => r.name.includes(o)));
-const PASSES = (opt('pass') || 'time,count,gpu,read,bar,pace').split(','), PHONE_ONLY = ['read', 'bar', 'pace'];
+const PASSES = (opt('pass') || 'time,count,gpu,peak,read,bar,pace').split(','), PHONE_ONLY = ['read', 'bar', 'pace'];
 
 // before the app runs: every frame the app asks for goes through here, and in the count pass every GL call too
 const hooks = pass => {
@@ -28,7 +29,7 @@ const hooks = pass => {
   const paced = f => { if (!P.pace) return raf(f); const due = P.last + P.pace(), go = t => now() >= due - 1 ? f(t) : raf(go); raf(go); }; // a slower device: the frame waits for its time
   window.requestAnimationFrame = cb => paced(t => {
     const a = now(); P.last = a; P.script?.(a); P.cur = {}; if (P.on) P.gl = {}; const heap = performance.memory?.usedJSHeapSize;
-    cb(t); P.endFrame?.(); const b = now(); P.firstPicture ??= b; // the loader's work ends with the first frame, whichever side of `ready` it is done on
+    cb(t); P.endFrame?.(); const b = now(); if (window.__book?.renderer.info.render.frame) P.firstPicture ??= b; // the loader's work ends with the first drawn frame, whichever side of `ready` it is done on
     if (P.on) P.frames.push({ t: a, cpu: b - a, phase: P.phase, heap, dpr: P.dpr?.(), st: P.cur, gl: P.gl, swept: P.swept?.() });
   });
   if (pass !== 'count') return;
@@ -134,6 +135,11 @@ const paced = ([ms, sec]) => new Promise(done => {
   const dpr = () => B.renderer.getPixelRatio(), f = new Function('dpr', 'return ' + ms), trace = [dpr()], t0 = performance.now(); P.pace = () => f(dpr()); ev('pointerdown', W / 2, H / 2);
   const step = () => { const u = (performance.now() - t0) / 1000; ev('pointermove', W / 2 + Math.sin(u * 3) * 90, H / 2); if (dpr() !== trace.at(-1)) trace.push(dpr()); if (u < sec) P.raf(step); else { ev('pointerup', W / 2, H / 2); P.pace = null; done(trace); } }; step();
 });
+const flatOut = () => new Promise(done => { // each view with a finger on it, as fast as frames come
+  const P = __perf, B = __book, g = document.querySelector('#gl'); g.setPointerCapture = () => {}; const out = {};
+  const ev = (t, x, y) => g.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, button: t === 'pointermove' ? -1 : 0 }));
+  const views = ['room', 'book', 'desk']; (async () => { for (const v of views) { B.goView(v, true); await new Promise(r => setTimeout(r, 300)); ev('pointerdown', 200, 300); let i = 0; const mv = setInterval(() => ev('pointermove', 200 + 40 * Math.sin(++i / 8), 300), 8); await new Promise(r => setTimeout(r, 500)); let n = 0; const t0 = performance.now(); await new Promise(r => { const f = () => { n++; performance.now() - t0 < 2500 ? requestAnimationFrame(f) : r(); }; f(); }); out[v] = +(2500 / n).toFixed(2); clearInterval(mv); ev('pointerup', 200, 300); B.goView(v, true); } done(out); })();
+});
 const CASES = { saving: ['33.4', 11, 'a phone saving power: 30 fps whatever is drawn'], fill: ['30 * (dpr / 1.5) ** 2', 7, 'too many pixels: 30 ms at 1.5, and less as it draws less'], hitch: ['performance.now() % 3000 < 34 ? 400 : 0', 7, 'a hitch now and then, on a phone with room to spare'] };
 
 // the answer to a slow run, against a clock that does not need a device: every case the app has to get right, on the numbers alone
@@ -157,12 +163,14 @@ for (const run of RUNS) {
   for (const pass of PASSES) {
     if (pass !== 'time' && (run.slow || run.small)) continue; // the rest read the same with or without a slower processor
     if (PHONE_ONLY.includes(pass) && !phone) continue;
-    const b = await run.type.launch(run.launch || {}), c = await b.newContext(run.ctx), p = await c.newPage();
+    if (pass === 'peak' && (run.type !== chromium)) continue; // WebKit has no way to drop the display's limit
+    const b = await run.type.launch(pass === 'peak' ? { ...run.launch, args: [...run.launch.args, '--disable-gpu-vsync', '--disable-frame-rate-limit'] } : run.launch || {}), c = await b.newContext(run.ctx), p = await c.newPage();
     const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error' || /GL_INVALID|WebGL:|no image data/.test(m.text())) errs.push(m.text()); }); await p.addInitScript(hooks, pass);
     const t0 = Date.now(); await p.goto(url + (url.includes('?') ? '&' : '?') + (pass === 'read' ? 'p=0' : 'p=3')); await p.waitForFunction(() => document.body.classList.contains('ready'), null, { timeout: 240000 }); await p.evaluate(() => new Promise(r => { const f = () => __perf.firstPicture ? r() : __perf.raf(f); f(); })); const load = Math.round(await p.evaluate(() => __perf.firstPicture));
     if (run.slow) await (await c.newCDPSession(p)).send('Emulation.setCPUThrottlingRate', { rate: run.slow });
     if (run.small) for (const pid of execSync('pgrep -f "ms-playwright/webkit.*(WebContent|GPU)"').toString().trim().split('\n')) execSync(`taskpolicy -b -p ${pid}`);
     await p.evaluate(() => new Promise(r => { let n = 0; const f = () => ++n > 120 ? r() : __perf.raf(f); f(); })); // past the first frames
+    if (pass === 'peak') { const w = await p.evaluate(flatOut); report[run.name].peak = w; console.log(`${run.name}\tpeak\tms a frame ${JSON.stringify(w)}`); await b.close(); continue; }
     if (PHONE_ONLY.includes(pass)) {
       if (pass === 'read') { await p.evaluate(() => { __perf.on = true; __perf.phase = 'first'; }); const w = await p.evaluate(reading), g = await p.evaluate(() => ({ up: __perf.load, links: __perf.shaders.filter(x => x !== 'load').length })); report[run.name].read = { ...w, firstWorst: r(Math.max(...w.first), 1), againWorst: r(Math.max(...w.again), 1) }; console.log(`${run.name}\tread\tworst gap on a first showing ${r(Math.max(...w.first), 1)} ms, the second time ${r(Math.max(...w.again), 1)} ms`); }
       if (pass === 'bar') { const w = await p.evaluate(sliding); report[run.name].bar = w; console.log(`${run.name}\tbar\t${w.made} buffer changes in 24 frames of sliding, worst gap ${r(w.worstGap, 1)} ms, picture off its box by ${r(w.off, 4)}`); need(w.made <= 2, `${run.name}: the picture's buffers were remade ${w.made} times while a bar slid`); need(w.off < 1e-6, `${run.name}: the picture's shape lagged its box`); need(Math.abs(w.buffer[1] / w.buffer[0] - w.box[1] / w.box[0]) < 0.01, `${run.name}: the buffer never caught up with the box`); }
@@ -187,5 +195,5 @@ for (const run of RUNS) {
 }
 const sums = await logic(); if (sums) { report.logic = sums; console.log('logic\t' + JSON.stringify(sums)); const s = sums; need(s.steady.length === 1, `steady 60 fps moved the resolution: ${s.steady}`); need(s.saving.at(-1) === 1.5 && s.saving.length === 4, `30 fps whatever is drawn: ${s.saving}`); need(s.fill.at(-1) === 1.25 && s.fill.length === 2, `too many pixels: ${s.fill}`); need(s.back.at(-1) === 1.5, `a load that eased never came back: ${s.back}`); need(s.tries.length < 20 && s.tries.at(-1) === 1.25, `no room to rise and it kept trying: ${s.tries}`); }
 if (out) fs.writeFileSync(out, JSON.stringify(report, null, 1));
-if (opt('against')) { const a = JSON.parse(fs.readFileSync(opt('against'))), row = (k, f) => console.log(k.padEnd(34), ...Object.keys(report).filter(n => report[n].time && a[n]?.time).map(n => `${n}: ${f(a[n])} -> ${f(report[n])}`)); for (const [k, f] of [['frames over 33 ms', v => v.time.all.over33], ['gap p99, ms', v => v.time.all.gapP99], ['frame CPU mean, ms', v => v.time.all.cpuMean], ['frame CPU p99, ms', v => v.time.all.cpuP99], ['JS garbage, MB/s', v => v.time.allocMBs], ['GPU, ms a frame', v => v.gpu?.total ?? '-'], ['draws a frame', v => v.count?.draws ?? '-'], ['GL calls a frame', v => v.count?.calls ?? '-']]) row(k, f); }
+if (opt('against')) { const a = JSON.parse(fs.readFileSync(opt('against'))), row = (k, f) => console.log(k.padEnd(34), ...Object.keys(report).filter(n => report[n].time && a[n]?.time).map(n => `${n}: ${f(a[n])} -> ${f(report[n])}`)); for (const [k, f] of [['frames over 33 ms', v => v.time.all.over33], ['gap p99, ms', v => v.time.all.gapP99], ['frame CPU mean, ms', v => v.time.all.cpuMean], ['frame CPU p99, ms', v => v.time.all.cpuP99], ['JS garbage, MB/s', v => v.time.allocMBs], ['flat out, ms a frame', v => JSON.stringify(v.peak ?? '-')], ['draws a frame', v => v.count?.draws ?? '-'], ['GL calls a frame', v => v.count?.calls ?? '-']]) row(k, f); }
 console.log(fails.length ? 'FAIL:\n' + fails.join('\n') : 'PASS'); process.exit(fails.length ? 1 : 0);
