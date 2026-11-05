@@ -23,11 +23,15 @@ button{font:inherit;color:inherit}
 #loader img{position:absolute;left:50%;top:50%;height:min(100%,100vw*67/79);transform:translate(-50%,-50%)}
 @media (max-aspect-ratio:17/20){#loader img{width:100%;height:100%;object-fit:cover}}
 body.ready #loader{opacity:0;pointer-events:none}
+#loader .t{position:relative;font:700 34px 'Playfair Display',serif;letter-spacing:.3em;color:var(--fg);opacity:.9;text-shadow:var(--halo)}
+#loader .bar{position:relative;width:110px;height:1px;background:var(--edge);overflow:hidden}
+#loader .bar i{display:block;width:40%;height:100%;background:var(--acc);animation:ld 1.4s ease-in-out infinite}
+@keyframes ld{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
 #loader .err{max-width:30em;text-align:center;font:400 14px var(--body);color:var(--dim);line-height:1.6;padding:0 24px}
 @media (max-width:700px){
  .snd{left:4px;bottom:50px}.views{left:4px;right:4px;bottom:6px;justify-content:space-between;gap:0}.snd,.views button{padding:0 clamp(1px,1.3vw - 1px,6px);font-size:clamp(21px,6.3vw,25px);letter-spacing:0}.hint{top:auto;bottom:56px;font-size:12px;white-space:normal;width:86vw;text-align:center}
 }
-@media (prefers-reduced-motion:reduce){#hud,#loader{transition:none}}
+@media (prefers-reduced-motion:reduce){#loader .bar i{animation:none}#hud,#loader{transition:none}}
 @supports (padding:env(safe-area-inset-top)){.snd{bottom:calc(17px + env(safe-area-inset-bottom));left:calc(15px + env(safe-area-inset-left))}.views{bottom:calc(17px + env(safe-area-inset-bottom));right:calc(15px + env(safe-area-inset-right))}}
 @media (max-width:700px){@supports (padding:env(safe-area-inset-top)){.snd{bottom:calc(50px + env(safe-area-inset-bottom));left:calc(4px + env(safe-area-inset-left))}.views{bottom:calc(6px + env(safe-area-inset-bottom));left:calc(4px + env(safe-area-inset-left));right:calc(4px + env(safe-area-inset-right))}.hint{bottom:calc(56px + env(safe-area-inset-bottom))}}}
 @media (max-width:700px),(pointer:coarse){.snd{top:calc(6px + env(safe-area-inset-top,0px));left:calc(4px + env(safe-area-inset-left,0px));bottom:auto}}
