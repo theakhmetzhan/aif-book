@@ -65,24 +65,23 @@ export function star8Points(R, innerRatio = 0.765) {
   const pts = []; for (let k = 0; k < 16; k++) { const a = -Math.PI / 2 + k * Math.PI / 8; const r = k % 2 ? R * innerRatio : R; pts.push([Math.cos(a) * r, Math.sin(a) * r]); } return pts;
 }
 
-// endpaper: a street map of an imaginary city (the detective's patch), drawn procedurally
-export function endpaper(g, w, h, S, [base, line, hi] = ['#6f5233', 'rgba(239,227,200,.22)', 'rgba(239,227,200,.38)']) {
-  paperFill(g, w, h, base, 0.5, 9);
-  const r = rng(42); g.save(); g.lineCap = 'round';
-  // blocks: jittered grid of streets, plus two diagonal avenues and a river
-  const step = 1.15 * S;
-  g.strokeStyle = line; g.lineWidth = 0.05 * S;
-  for (let x = -step; x < w + step; x += step * (0.7 + r() * 0.6)) { g.beginPath(); g.moveTo(x, 0); let y = 0, xx = x; while (y < h) { y += step; xx += (r() - 0.5) * 0.25 * S; g.lineTo(xx, y); } g.stroke(); }
-  for (let y = -step; y < h + step; y += step * (0.7 + r() * 0.6)) { g.beginPath(); g.moveTo(0, y); let x = 0, yy = y; while (x < w) { x += step; yy += (r() - 0.5) * 0.25 * S; g.lineTo(x, yy); } g.stroke(); }
-  g.lineWidth = 0.14 * S; g.strokeStyle = hi;
-  g.beginPath(); g.moveTo(-1 * S, h * 0.85); g.lineTo(w + S, h * 0.2); g.stroke();
-  g.beginPath(); g.moveTo(w * 0.15, -S); g.lineTo(w * 0.7, h + S); g.stroke();
-  g.lineWidth = 0.5 * S; g.strokeStyle = line; g.beginPath(); g.moveTo(-S, h * 0.42);
-  for (let k = 0; k <= 10; k++) g.quadraticCurveTo(w * (k + 0.5) / 10, h * 0.42 + Math.sin(k * 1.3) * 1.4 * S, w * (k + 1) / 10, h * 0.42 + Math.sin(k * 1.3 + 0.7) * 0.9 * S);
-  g.stroke();
-  // a few marked locations
-  for (let k = 0; k < 7; k++) { const x = (0.1 + r() * 0.8) * w, y = (0.1 + r() * 0.8) * h; g.strokeStyle = hi; g.lineWidth = 0.04 * S; g.beginPath(); g.arc(x, y, 0.32 * S, 0, 7); g.stroke(); g.beginPath(); g.arc(x, y, 0.08 * S, 0, 7); g.fillStyle = hi; g.fill(); }
+// the inside of a board: plain laid paper, the mould's wires only just pressed into it, pasted down over the cover's cloth. The cloth turns in over the three outer edges, mitred at
+// the corners, and the paper stops short of them; at the spine edge it runs on into the joint
+export function endpaper(g, S, w, h, spine) {
+  paperFill(g, w, h, T.endpaper, 0.16, 9);
+  const r = rng(13); g.fillStyle = 'rgba(70,50,30,.03)'; for (let y = 0; y < h; y += 0.09 * S) g.fillRect(0, y, w, 0.022 * S * (0.8 + r() * 0.4)); // the laid lines
+  g.fillStyle = 'rgba(70,50,30,.022)'; for (let x = 1.1 * S; x < w; x += 2.4 * S) g.fillRect(x, 0, 0.03 * S, h); // the chain lines across them
+  const t = 0.3 * S, cut = 0.72 * S, sx = spine === 'left' ? 0 : w, fx = w - sx, d = sx ? 1 : -1, px = fx + d * t, cx = fx + d * cut; // how much cloth the paper leaves showing; where the cloth's cut edge lies under the paper; the spine and fore-edge sides; d runs in from the fore-edge
+  const line = (pts, style, lw) => { g.strokeStyle = style; g.lineWidth = lw * S; g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.stroke(); };
+  const fade = (x0, y0, x1, y1, rgba) => { const f = g.createLinearGradient(x0, y0, x1, y1); f.addColorStop(0, `rgba(${rgba})`); f.addColorStop(1, `rgba(${rgba.replace(/[^,]+$/, '0')})`); g.fillStyle = f; g.fillRect(0, 0, w, h); };
+  // the paper takes the shape of that cut edge, a ridge the light only just finds, and dips as it leaves the board for the joint
+  for (const [o, style] of [[-0.015 * S, 'rgba(255,240,210,.05)'], [0.015 * S, 'rgba(40,20,8,.055)']]) line([[sx, cut + o], [cx + o, cut + o], [cx + o, h - cut + o], [sx, h - cut + o]], style, 0.03);
+  fade(sx, 0, sx - d * 0.7 * S, 0, '70,45,15,.3');
+  g.save(); g.beginPath(); g.rect(0, 0, w, h); g.rect(Math.min(sx, px), t, w - t, h - 2 * t); g.clip('evenodd'); clothFill(g, w, h, T.cloth);
+  for (const [x0, y0, x1, y1] of [[0, 0, 0, 0.1 * S], [0, h, 0, h - 0.1 * S], [fx, 0, fx + d * 0.1 * S, 0]]) fade(x0, y0, x1, y1, '255,205,170,.16'); // the cloth rounds over the board's edge
+  for (const [y, iy] of [[0, t], [h, h - t]]) { line([[fx, y], [px, iy]], 'rgba(18,5,3,.7)', 0.02); line([[fx + d * 0.02 * S, y], [px + d * 0.02 * S, iy]], 'rgba(255,205,170,.14)', 0.012); }
   g.restore();
+  const rim = [[sx, t], [px, t], [px, h - t], [sx, h - t]]; line(rim, 'rgba(18,5,3,.6)', 0.03); line(rim, 'rgba(255,240,210,.3)', 0.008); // the shade the paper throws on the cloth, and its own cut edge
 }
 
 // book cloth: woven texture

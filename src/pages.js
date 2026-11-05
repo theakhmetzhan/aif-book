@@ -138,7 +138,7 @@ export const FACES = {
     kind: 'board', draw(g, S, w, h) { clothFill(g, w, h, T.cloth); coverArt(g, S, w, h, false); },
     gold: T.foil ? (g, S, w, h) => { g.fillStyle = '#000'; g.fillRect(0, 0, w, h); coverArt(g, S, w, h, true); } : null,
   },
-  endFront: { kind: 'board', draw: (g, S, w, h) => endpaper(g, w, h, S, T.endpaper) },
+  endFront: { kind: 'board', draw: (g, S, w, h) => endpaper(g, S, w, h, 'right') },
   title: {
     side: 'R', num: 1, draw(g, S, w, h) {
       pageBase(g, w, h, 'left', 4); const P = new Page(g, S);
@@ -294,7 +294,7 @@ export const FACES = {
       stamp(g, S, 'CASE OPEN', 9.8, 17.4, { rot: -0.18, size: 0.5 });
     },
   },
-  endBack: { kind: 'board', draw: (g, S, w, h) => endpaper(g, w, h, S, T.endpaper) },
+  endBack: { kind: 'board', draw: (g, S, w, h) => endpaper(g, S, w, h, 'left') },
   back: {
     kind: 'board', draw(g, S, w, h, extra) {
       clothFill(g, w, h, T.cloth);
