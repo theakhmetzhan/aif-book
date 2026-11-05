@@ -19,7 +19,9 @@ button{font:inherit;color:inherit}
 #gl:focus-visible{outline:none}
 .sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 #loader .retry{all:unset;cursor:pointer;margin-top:4px;padding:7px 14px;border:1px solid var(--edge);border-radius:3px;font:400 12px var(--disp);letter-spacing:.14em;text-transform:uppercase;color:var(--fg)}
-#loader{position:fixed;inset:0;display:grid;place-content:center;justify-items:center;gap:20px;background:#000;transition:opacity 2.2s ease-out;z-index:10}
+#loader{position:fixed;inset:0;display:grid;place-content:center;justify-items:center;gap:20px;background:#000;transition:opacity .4s ease-out;z-index:10}
+#loader img{position:absolute;left:50%;top:50%;height:min(100%,100vw*67/79);transform:translate(-50%,-50%)}
+@media (max-aspect-ratio:17/20){#loader img{width:100%;height:100%;object-fit:cover}}
 body.ready #loader{opacity:0;pointer-events:none}
 #loader .err{max-width:30em;text-align:center;font:400 14px var(--body);color:var(--dim);line-height:1.6;padding:0 24px}
 @media (max-width:700px){
