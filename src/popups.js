@@ -17,6 +17,11 @@ function plain(color, side = THREE.FrontSide) {
   const k = color + side; if (mats[k]) return mats[k];
   return (mats[k] = new THREE.MeshStandardMaterial({ color, roughness: 0.92, metalness: 0, side, bumpMap: grain(), bumpScale: 0.25 }));
 }
+// a glue tab lies a hair above its page, about two steps of the depth buffer through Top's long lens, and on a tilting leaf the print flashes through it. The offset gets a material of its own: plain() shares by colour with the cut edges
+function tabPaper(color) {
+  const k = color + 'tab'; if (mats[k]) return mats[k];
+  return (mats[k] = Object.assign(plain(color).clone(), { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8 }));
+}
 const HIDDEN = new THREE.MeshBasicMaterial({ visible: false });
 const shade = (hex, k) => { const c = new THREE.Color(hex); const hsl = {}; c.getHSL(hsl); c.setHSL(hsl.h, hsl.s, Math.min(1, Math.max(0, hsl.l + k))); return '#' + c.getHexString(); };
 const shadowy = o => { o.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } }); return o; };
@@ -59,7 +64,7 @@ function piece(obj, { x = 0, v0, dir = -1, H, x0, x1, tx0 = x0, tx1 = x1, tab = 
   const fold = new THREE.Group(); fold.position.x = x; hinge.add(fold); fold.add(obj);
   if (tab) { // glue tab lying on the page on the far side of the fold
     const w = (tx1 - tx0), d = 0.42;
-    const t = new THREE.Mesh(new THREE.PlaneGeometry(w, d), plain(color || C.cream)); t.rotation.x = -Math.PI / 2; t.position.set((tx0 + tx1) / 2, 0.0012, -dir * d / 2); t.receiveShadow = true; hinge.add(t);
+    const t = new THREE.Mesh(new THREE.PlaneGeometry(w, d), tabPaper(color || C.cream)); t.rotation.x = -Math.PI / 2; t.position.set((tx0 + tx1) / 2, 0.0012, -dir * d / 2); t.receiveShadow = true; hinge.add(t);
   }
   return { hinge, fold, dir, H, x0, x1, v0, lo: dir < 0 ? v0 - H : v0, hi: dir < 0 ? v0 : v0 + H, layer: 0, span: 1 };
 }
@@ -257,7 +262,7 @@ export const BUILDERS = {
       dishHinge.rotation.x = lean;
     };
     // glue tabs for the two panels
-    for (const v of [F.agent.v0, F.agent.v1]) { const t = new THREE.Mesh(new THREE.PlaneGeometry(aw, 0.42), plain(body)); t.rotation.x = -Math.PI / 2; t.position.set(bx0 + aw / 2, 0.0012, v + 0.21); t.receiveShadow = true; box.add(t); }
+    for (const v of [F.agent.v0, F.agent.v1]) { const t = new THREE.Mesh(new THREE.PlaneGeometry(aw, 0.42), tabPaper(body)); t.rotation.x = -Math.PI / 2; t.position.set(bx0 + aw / 2, 0.0012, v + 0.21); t.receiveShadow = true; box.add(t); }
     pieces.push(pc);
     return { pieces };
   },
