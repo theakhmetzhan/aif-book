@@ -2,7 +2,7 @@
 
 A 3D pop-up casebook of AI fundamentals, lying open on a detective's desk at night, in front of the evidence board used to plan it. At desk level the paper exhibits tell the story; lean over the book and the pages beneath give the full explanation.
 
-Endterm project for AI Fundamentals (AIF1303), QAIRU, Fall 2026, by Akhmetzhan Turlybek. This edition contains Cases I–III.
+Endterm project for AI Fundamentals (AIF1303), QAIRU, Fall 2026, by Akhmetzhan Turlybek. This edition contains all ten cases, Cases I–X.
 
 **Read it:** https://theakhmetzhan.github.io/aif-book/
 
@@ -30,6 +30,6 @@ Endterm project for AI Fundamentals (AIF1303), QAIRU, Fall 2026, by Akhmetzhan T
 - **First picture:** the page carries a small picture of the first frame, one for wide windows and one for narrow, and the room fades in over it in 0.4 s. `scripts/export-poster.mjs` makes them again when that frame changes. It is placed the way the camera frames the room, so it lands on the first frame to the pixel on a wide window or a phone, and within about 4% on a tablet held upright or a window near square, where the camera stands between the two distances the pictures were taken from. The room's surface textures are preloaded from the page, so they download while the script arrives.
 - **Repeat visits:** `public/sw.js` keeps the site, about 7 MB, for repeat visits and for no network; the page itself always asks the network first.
 - **Speed:** one last pass adds the glow, tone-maps and lays on the film, so the picture is multisampled once. Everything that shows later goes to the GPU behind the poster, with one rehearsal of every pop-up, so no spread stops mid-turn for its first upload; the canvases are then let go. On a phone the shadow maps stay still while only the camera moves: the lamp's follows the pages, the window's follows the paper on the board. The rain slows to 15 updates a second while the view sweeps, and a phone at rest draws every other frame. `src/resolution.js` steps a phone's resolution down when a run of moving frames is slow, back up in a still moment, and leaves it alone if pixels turn out not to be the cause. `scripts/check/perf.mjs` plays one route through every view in WebKit and Chromium, at a phone's size and on a desktop, and reports frame times, stages, GPU passes, draws, triangles, memory and garbage; it fails on what does not depend on the machine. No real phone has run it: its milliseconds are this machine's.
-- **Figure data:** the data in `src/data/` is generated and checked in Python, in `scripts/verify/`.
+- **Figure data:** the data in `src/data/` is generated and checked in Python, in `scripts/verify/`, with no libraries beyond the standard one: `python3 scripts/verify/<case>.py` rewrites a case's JSON (`graph.py`, `hills.py` and `contours.py` write to the working directory). The tips, case notes and safeguard rates are invented for teaching.
 
 Develop: `npm i && npm run dev`. Third-party assets and sounds are credited in `public/assets/CREDITS.md` and `public/audio/CREDITS.md`. The fonts (SIL Open Font License) are served from `public/fonts/`.

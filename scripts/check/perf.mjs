@@ -122,7 +122,7 @@ function gpuStats(F, wait) { const byPhase = {}, frameMs = f => Object.entries(f
 const reading = () => new Promise(done => { // every spread, there and back, a little past each turn's end
   const P = __perf, key = k => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true })), worst = {};
   const turn = (k, name, left) => new Promise(r => { key(k); let n = 0, w = 0, t = performance.now(); const f = () => { const q = performance.now(); w = Math.max(w, q - t); t = q; ++n < 100 ? P.raf(f) : (worst[name] = w, r()); }; P.raf(f); });
-  (async () => { P.phase = 'first'; const a = [], b = []; for (let i = 1; i <= 8; i++) { await turn('ArrowRight', 'f' + i); a.push(worst['f' + i]); } P.phase = 'second'; for (let i = 7; i >= 0; i--) { await turn('ArrowLeft', 'b' + i); b.push(worst['b' + i]); } done({ first: a, again: b }); })();
+  (async () => { P.phase = 'first'; const a = [], b = [], N = __book.book.sheets.length; for (let i = 1; i <= N; i++) { await turn('ArrowRight', 'f' + i); a.push(worst['f' + i]); } P.phase = 'second'; for (let i = N - 1; i >= 0; i--) { await turn('ArrowLeft', 'b' + i); b.push(worst['b' + i]); } done({ first: a, again: b }); })();
 });
 const sliding = () => new Promise(done => { // an address bar on its way out: the box changes for 24 frames running, then holds
   const P = __perf, B = __book, g = document.querySelector('#gl'), H = g.clientHeight, R = B.renderer, set = R.setSize; let made = 0; R.setSize = function (...a) { made++; return set.apply(this, a); };

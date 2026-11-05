@@ -20,7 +20,7 @@ const measure = async base => {
   const pageY = x => { const r = new T.Raycaster(new T.Vector3(x, 30, 9.4), new T.Vector3(0, -1, 0)); return r.intersectObject(bk.group, true)[0]?.point.y; }; // past every pop-up's foot
   const px = (a, W, H) => { const q = a.clone().project(cam); return [(q.x + 1) / 2 * W, (1 - q.y) / 2 * H]; };
   const frame = () => { const c = cam.position, seen = pops().map(a => a.clone().project(cam)); return { eye: c.y, left: pageY(-7), right: pageY(7), popsOut: seen.filter(q => Math.abs(q.x) > 1 || Math.abs(q.y) > 1).length, pops: seen.length }; };
-  const fan = (W, H) => { const foot = Math.min(pageY(-7), pageY(7)); let worst = 0; for (const a of pops()) { const p = px(a, W, H), f = px(new T.Vector3(a.x, foot, a.z), W, H); worst = Math.max(worst, Math.hypot(p[0] - f[0], p[1] - f[1])); } return worst; };
+  const fan = (W, H) => { const foot = { L: pageY(-7), R: pageY(7) }; let worst = 0; for (const a of pops()) { const p = px(a, W, H), f = px(new T.Vector3(a.x, a.x < 0 ? foot.L : foot.R, a.z), W, H); worst = Math.max(worst, Math.hypot(p[0] - f[0], p[1] - f[1])); } return worst; };
   const box = (W, H) => { const x = points().map(a => a.x), l = px(new T.Vector3(Math.min(...x), 1, 0), W, H)[0], r = px(new T.Vector3(Math.max(...x), 1, 0), W, H)[0]; return (l + r) / 2 - W / 2; };
   const crease = (W, H) => px(new T.Vector3(bk.group.position.x + bk.centerX(), 1, 0), W, H)[0] - W / 2; // mid-turn the block's outline swings with the leaf: this is what stays put
   const board = () => { const { z, xs, ys } = B.boardBox, c = [[xs[0], ys[1]], [xs[1], ys[1]], [xs[0], ys[0]], [xs[1], ys[0]]].map(([x, y]) => new T.Vector3(x, y, z).project(cam)); return { c: c.map(q => [q.x, q.y]) }; };
@@ -56,20 +56,20 @@ for (const [name, type, opts] of [['WebKit', webkit, {}], ['Chromium', chromium,
 
     // what each view sees
     await p.evaluate(measure, base);
-    const W = size.width, H = size.height;
-    for (let k = 1; k < 8; k++) {
+    const W = size.width, H = size.height, N = await p.evaluate(() => __book.book.sheets.length); // the last state: every sweep runs to the back of whatever book this is
+    for (let k = 1; k < N; k++) {
       const f = await p.evaluate(async k => { await __m.flip(k, 'watch'); return __m.frame(); }, k);
       need(f.eye <= Math.min(f.left, f.right) + 0.03, `${tag}: Watch at ${k}: eye ${f.eye.toFixed(3)} above page ${Math.min(f.left, f.right).toFixed(3)}`);
       need(!f.popsOut, `${tag}: Watch at ${k}: ${f.popsOut} of ${f.pops} pop-up points out of frame`);
     }
     const wrong = await p.evaluate(async () => { await __m.flip(3, 'watch'); const r = __book.rig; r.g.ph = r.s.ph = 1.45; r.apply(); __book.cam.updateMatrixWorld(true); return __m.frame(); });
     need(wrong.eye > Math.min(wrong.left, wrong.right) + 0.03, `${tag}: control: Watch check passes a raised eye`);
-    let worst = 0; for (let k = 1; k < 8; k++) worst = Math.max(worst, await p.evaluate(async ([k, W, H]) => { await __m.flip(k, 'top'); return __m.fan(W, H); }, [k, W, H]));
+    let worst = 0; for (let k = 1; k < N; k++) worst = Math.max(worst, await p.evaluate(async ([k, W, H]) => { await __m.flip(k, 'top'); return __m.fan(W, H); }, [k, W, H]));
     need(worst <= FLAT, `${tag}: Top: a pop-up stands ${worst.toFixed(1)} px off its foot`);
     const close = await p.evaluate(async ([W, H]) => { await __m.flip(3, 'top'); const r = __book.rig; r.s.r = 42; r.s.k = 0.344; r.apply(); __book.cam.updateMatrixWorld(true); __book.cam.updateProjectionMatrix(); return __m.fan(W, H); }, [W, H]);
     need(close > FLAT, `${tag}: control: Top check passes a close camera (${close.toFixed(1)} px)`);
-    for (const v of ['watch', 'top']) for (const k of [0, 1, 4, 7, 8]) { const off = await p.evaluate(async ([v, k, W, H]) => { await __m.flip(k, v); return __m.box(W, H); }, [v, k, W, H]); need(Math.abs(off) < W * 0.01, `${tag}: ${v} at ${k}: book ${off.toFixed(1)} px off centre`); }
-    for (const v of ['watch', 'top']) for (const k of [1.5, 3.5, 5.5]) { const off = await p.evaluate(async ([v, k, W, H]) => { await __m.flip(k, v); return __m.crease(W, H); }, [v, k, W, H]); need(Math.abs(off) < W * 0.01, `${tag}: ${v} mid-turn at ${k}: crease ${off.toFixed(1)} px off centre`); }
+    for (const v of ['watch', 'top']) for (let k = 0; k <= N; k++) { const off = await p.evaluate(async ([v, k, W, H]) => { await __m.flip(k, v); return __m.box(W, H); }, [v, k, W, H]); need(Math.abs(off) < W * 0.01, `${tag}: ${v} at ${k}: book ${off.toFixed(1)} px off centre`); }
+    for (const v of ['watch', 'top']) for (let k = 1.5; k < N - 1; k += 1) { const off = await p.evaluate(async ([v, k, W, H]) => { await __m.flip(k, v); return __m.crease(W, H); }, [v, k, W, H]); need(Math.abs(off) < W * 0.01, `${tag}: ${v} mid-turn at ${k}: crease ${off.toFixed(1)} px off centre`); }
     const aside = await p.evaluate(async ([W, H]) => { await __m.flip(4, 'top'); const g = __book.book.group; g.position.x += 6; g.updateMatrixWorld(true); return [__m.box(W, H), __m.crease(W, H)]; }, [W, H]);
     need(aside.every(a => Math.abs(a) >= W * 0.01), `${tag}: control: centre check passes a book 6 cm aside (${aside})`);
     const bd = await p.evaluate(async () => { await __m.flip(3, 'board'); return __m.board(); }), [tl, tr, bl, br] = bd.c;

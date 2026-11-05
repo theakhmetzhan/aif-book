@@ -10,7 +10,7 @@ const res=await p.evaluate(async ()=>{
   const step=+(new URLSearchParams(location.search).get('step')||0.02);
   const worst=[]; let checked=0;
   const inv=new (B.group.matrixWorld.constructor)();
-  for(let pp=0; pp<=8.0001; pp+=0.01){
+  for(let pp=0; pp<=B.sheets.length+0.0001; pp+=0.01){
     const q=Math.round(pp*1000)/1000; B.set(q,0,0); B.group.updateMatrixWorld(true);
     // slabs in each sheet's pivot frame
     const slabs=B.sheets.map(s=>{ const m=s.pivot.matrixWorld.clone().invert(); return s.isBoard?{m,x0:0,x1:14.3,y0:s.bot,y1:s.top,z:10.3}:{m,x0:0.07,x1:PW+0.07,y0:s.bot,y1:s.top,z:PH/2}; });

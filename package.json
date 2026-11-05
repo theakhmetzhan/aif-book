@@ -1,7 +1,7 @@
 {
   "name": "aif-book",
   "version": "1.0.0",
-  "description": "Ushqyn: The Spark That Learned to Think. AI Fundamentals book (QAIRU AIF1303)",
+  "description": "EVIDENCE: A Casebook of Artificial Intelligence. AI Fundamentals book (QAIRU AIF1303)",
   "main": "index.js",
   "scripts": {
     "dev": "vite",

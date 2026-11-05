@@ -25,7 +25,7 @@ const r=await p.evaluate(()=>{
     for(const i of rest){ const a=f[0].d[i], z=f[f.length-1].d[i], lo=Math.min(a,z), hi=Math.max(a,z); for(const g of f) back=Math.max(back,lo-g.d[i],g.d[i]-hi); }
     let step=0; for(const i of rest) for(let t=1;t<f.length;t++) step=Math.max(step,Math.abs(f[t].d[i]-f[t-1].d[i]));
     return {name:`${m.from}>${m.to}`,frames:f.length,moved:moved.length,lag,lagAt,apart,back,step}; };
-  const moves=[[0,1],[1,0],[8,7],[7,8]]; for(let k=1;k<7;k++) moves.push([k,k+1],[k+1,k]);
+  const moves=[[0,1],[1,0],[N,N-1],[N-1,N]]; for(let k=1;k<N-1;k++) moves.push([k,k+1],[k+1,k]);
   const runs=moves.map(([a,c])=>run(a,c)), table=runs.map(judge);
   // the same shifts against p itself, so a threshold shows wherever the spring happens to carry it: a kink is a jump in speed, a step a jump in acceleration
   const dp=1/2048, n=N/dp, d=leaves.map(()=>new Float64Array(n+1)), turn=new Uint8Array(n+1); for(let i=0;i<=n;i++){ const q=i*dp; pose(q); leaves.forEach((k,j)=>d[j][i]=shift(S[k],q)); }

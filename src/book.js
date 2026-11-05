@@ -10,7 +10,7 @@ import { T } from './theme.js';
 import { clothFill, goldGradient } from './paper.js';
 import { Page } from './typeset.js';
 
-export const PW = 14, PH = 20, BW = 14.3, BH = 20.6, BT = 0.2, ST = 0.13;
+export const PW = 14, PH = 20, BW = 14.3, BH = 20.6, BT = 0.2, ST = 0.05;
 const N = SHEETS.length, NI = N - 2;
 const HINGE = 0; // boards hinge at the spine edge of the block and overhang it by a square elsewhere
 export const G0 = 0.07; // pages start this far from the hinge axis, so a turning page's corners never enter either stack
@@ -18,7 +18,7 @@ const REST = 0.01; // a sheet within this angle of flat lies on its stack
 const STRIP = 0.2, CROWN = 0.3, LINING = 0.07, CLOTH = 0.012; // the spine strip stands this far off the block, is rounded this much when shut, is this thick, and its cloth this thick off the desk
 const EASE = 0.7, NECK = 0.34, BIND = 0.1; // how far a leaf runs on past its sheet's end before it bends; how far a top page stops short of the crease; how far above the cloth the crease ends
 const LEAVES = 0.5; // the paper-edge texture repeats every this many cm
-const RUN = 0.42; // the thicker stack's top page reaches the crease in this much run per unit of height: steep, as card curves into a gutter
+const RUN = 0.15; // the thicker stack's top page reaches the crease in this much run per unit of height: steep, as card curves into a gutter
 const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const glide = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * t * (t * (6 * t - 15) + 10); }; // sstep with no jolt where it starts or stops
 const turnEase = t => t - Math.sin(2 * Math.PI * t) / (2 * Math.PI); // eases in and out of each turn
@@ -46,6 +46,9 @@ function faceMesh(map, back, y) {
   for (let i = 0; i < p.count; i++) { const x = p.getX(i) - G0, z = p.getZ(i); uv.setXY(i, back ? 1 - x / PW : x / PW, 1 - (z + PH / 2) / PH); }
   const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map, roughness: 0.86, metalness: 0 })); m.receiveShadow = true; m.castShadow = true; return m;
 }
+
+// a slab of the block: only its fore-edge and two ends ever show, so only they are built, and they draw as one
+function edgeBox(h) { const g = new THREE.BoxGeometry(PW, h, PH), i = g.index.array; g.setIndex([...i.slice(0, 6), ...i.slice(24, 36)]); g.clearGroups(); return g; }
 
 export class Book {
   constructor(scene, renderer, { qr, mobile = false } = {}) {
@@ -84,8 +87,8 @@ export class Book {
         mesh.position.set(BW / 2 - HINGE, inner === 'bot' ? BT / 2 : -BT / 2, 0); mesh.castShadow = mesh.receiveShadow = true; pivot.add(mesh);
         s.mesh = mesh; if (inner === 'bot') { s.top = BT; s.bot = 0; } else { s.top = 0; s.bot = -BT; }
       } else {
-        pivot.add(faceMesh(ft.map, false, ST / 2), faceMesh(bt.map, true, -ST / 2));
-        const edge = new THREE.Mesh(new THREE.BoxGeometry(PW, ST, PH), [edgeMat, hidden, hidden, hidden, edgeMat, edgeMat]); s.edge = edge; edge.position.x = G0 + PW / 2; edge.castShadow = true; pivot.add(edge);
+        s.faceF = faceMesh(ft.map, false, ST / 2); s.faceB = faceMesh(bt.map, true, -ST / 2); pivot.add(s.faceF, s.faceB);
+        const edge = new THREE.Mesh(edgeBox(ST), edgeMat); s.edge = edge; edge.position.x = G0 + PW / 2; edge.castShadow = true; pivot.add(edge);
         s.top = ST / 2; s.bot = -ST / 2;
       }
       // pop-ups glued to either face of this sheet
@@ -135,7 +138,7 @@ export class Book {
     // flush with the page edges and just overlapping both pages: an inset or a slit leaves lit paper thinner than a pixel,
     // which shimmers along the block whenever the view moves
     for (let k = 1; k < N; k++) {
-      const g = this.gaps[k] + 0.002, m = new THREE.Mesh(leafUV(new THREE.BoxGeometry(PW, g, PH), g, this.sheets[k].yR + this.sheets[k].top - 0.001), [edgeMat, hidden, hidden, hidden, edgeMat, edgeMat]);
+      const g = this.gaps[k] + 0.002, m = new THREE.Mesh(leafUV(edgeBox(g), g, this.sheets[k].yR + this.sheets[k].top - 0.001), edgeMat);
       m.position.x = G0 + PW / 2; m.castShadow = true; m.matrixAutoUpdate = false; // no shadow lands on them: a shadow's edge grazing these faces breaks into diagonal bands
       this.sheets[k].pivot.add(m); this.fillers.push({ k, m, g: this.gaps[k] });
     }
@@ -224,6 +227,7 @@ export class Book {
       const slide = yl > yr ? glide(0.02, 0.5, s.e) : glide(0.5, 0.98, s.e);
       if (s.isBoard) s.pivot.position.set(s.i ? Bx : Fx, s.i ? By : Fy, 0); else s.pivot.position.set(xr + (xl - xr) * slide, yr + (yl - yr) * slide, 0);
       s.pivot.rotation.z = s.theta;
+      if (!s.isBoard) { const near = Math.abs(s.i + 0.5 - p) <= 2.5; s.faceF.visible = near || s.e < 0.5; s.faceB.visible = near || s.e > 0.5; } // the face turned to the board, buried in a stack
       const rest = Math.PI * s.e <= REST || Math.PI * (1 - s.e) <= REST;
       if (s.rest !== undefined && s.rest !== rest) this.events.sheet?.({ type: s.rest ? 'lift' : 'land', sheet: s.i });
       s.rest = rest;

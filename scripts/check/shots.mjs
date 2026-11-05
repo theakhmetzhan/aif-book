@@ -32,13 +32,13 @@ const COMPLAINTS = [
   ['5', 'just make it a regular book print endpaper super minimal subtle elegant premium not eye catching or demanding any attention at all', 'top, owner-top at 1 and 7: the paper recedes'],
 ];
 const views = viewArg && viewArg !== 'all' ? viewArg.split(',').filter(v => VIEWS[v]) : Object.keys(VIEWS), rain = !viewArg || viewArg === 'all' || viewArg.split(',').includes('rain');
-const states = stateArg ? stateArg.split(',').map(Number) : Array.from({ length: 65 }, (_, i) => i / 8), rests = [0, 1, 2, 3, 4, 5, 6, 7, 8];
 const url = process.env.URL || 'http://localhost:5181/aif-book/', W = 1920, H = 1080, K = 3;
 const b = await puppeteer.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: 'new', protocolTimeout: 600000, args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const pg = await b.newPage(); await pg.setViewport({ width: W, height: H });
 const errs = []; pg.on('pageerror', e => errs.push(e.message)); pg.on('console', m => ['error', 'warn', 'warning'].includes(m.type()) && errs.push(m.text().slice(0, 200)));
 await pg.goto(url + '?freeze=1&shot=1&dpr=1&t=2&p=0', { waitUntil: 'networkidle0' }); await pg.waitForFunction(() => document.body.classList.contains('ready'), { timeout: 120000 });
 await pg.addStyleTag({ content: '.hint{display:none!important}' });
+const N = await pg.evaluate(() => __book.book.sheets.length), states = stateArg ? stateArg.split(',').map(Number) : Array.from({ length: N * 8 + 1 }, (_, i) => i / 8), rests = Array.from({ length: N + 1 }, (_, i) => i);
 const frame = () => pg.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r)))));
 const look = (p, c, zoom, exp) => pg.evaluate((p, c, zoom, exp, W, H, K) => {
   const B = __book, cam = B.cam, V = cam.position.constructor; B.set(p); B.book.set(p, 2); B.book.group.position.x = -B.book.centerX(p); B.book.group.updateMatrixWorld(true);
