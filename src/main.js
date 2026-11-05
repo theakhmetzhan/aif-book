@@ -248,6 +248,6 @@ async function start() {
   document.body.classList.add('ready');
   requestAnimationFrame(frame);
   // a repeat visit, or one with no network, comes from the worker's copy; the site is small enough to keep whole
-  if (import.meta.env.MODE === 'production' && 'serviceWorker' in navigator) navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js').catch(e => console.info('[sw]', e?.message));
+  if (import.meta.env.MODE === 'production' && 'serviceWorker' in navigator) navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js').then(() => navigator.serviceWorker.ready).then(r => r.active.postMessage(performance.getEntriesByType('resource').map(e => e.name))).catch(e => console.info('[sw]', e?.message)); // the worker arrives after the first load, so it is told what that load fetched
 }
 start().catch(e => { console.error(e); fail('Something went wrong while setting up the desk. Try reloading the page.'); });

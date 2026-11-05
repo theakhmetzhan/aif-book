@@ -22,8 +22,12 @@ for (const [name, type, opts] of [['WebKit', webkit, {}], ['Chromium', chromium,
       const d = await p.evaluate(a => { const B = __book, r = B.rig; B.goView('room', true); r.g.th = a; r.limit(); r.s.th = a; B.goView('desk'); return Math.abs(r.g.th - r.s.th); }, a);
       need(d <= Math.PI + 1e-6, `${tag}: from ${a} the way home is ${d.toFixed(2)}`);
     }
-    const seen = await p.evaluate(async () => { const B = __book, r = B.rig; B.goView('room', true); r.free(); r.g.th = Math.PI; r.limit(); r.t.copy(r.tg); Object.assign(r.s, r.g); r.apply(); await new Promise(f => requestAnimationFrame(() => requestAnimationFrame(f))); const q = B.book.group.position.clone().project(B.cam); return [q.x, q.y]; });
+    const seen = await p.evaluate(async () => { const B = __book, r = B.rig; B.set(0); B.goView('room', true); r.free(); r.g.th = Math.PI; r.limit(); r.t.copy(r.tg); Object.assign(r.s, r.g); r.apply(); await new Promise(f => requestAnimationFrame(() => requestAnimationFrame(f))); const q = B.book.group.position.clone().set(0, 2, 0).project(B.cam); return [q.x, q.y]; });
     need(Math.abs(seen[0]) < 0.9 && Math.abs(seen[1]) < 0.9, `${tag}: the book is out of sight from the wall: ${seen}`);
+    const home = await p.evaluate(async () => { const B = __book, r = B.rig; B.goView('room', true); const a = { y: r.tg.y, ph: r.g.ph, r: r.g.r }; for (let i = 0; i <= 60; i++) { r.g.th = i / 60 * 2 * Math.PI; r.limit(); } return [Math.abs(r.tg.y - a.y), Math.abs(r.g.ph - a.ph), Math.abs(r.g.r - a.r)]; });
+    need(Math.max(...home) < 1e-9, `${tag}: a full turn changed the framing: ${home}`);
+    const jump = await p.evaluate(async () => { const B = __book, r = B.rig; let worst = 0; for (const v of ['room', 'desk', 'board']) { B.goView(v, true); r.free(); let was = null; for (let i = 0; i <= 720; i++) { r.g.th = r.s.th = i / 720 * 2 * Math.PI; r.limit(); r.apply(); const c = B.cam.position.clone(); if (was) worst = Math.max(worst, c.distanceTo(was)); was = c; } } return worst; });
+    need(jump < 30, `${tag}: a half-degree turn moved the eye ${jump.toFixed(1)}`); // from five metres out a half-degree is already some way: this is for the snap, which was over 200
     const snd = await p.evaluate(() => { const r = document.querySelector('.snd').getBoundingClientRect(); return { x: r.left, y: r.top }; });
     if (phone) need(snd.x < 40 && snd.y < 40, `${tag}: Sound is at ${snd.x}, ${snd.y}`);
     need(!errs.length, `${tag}: ${errs[0]}`); await c.close();

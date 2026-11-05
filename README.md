@@ -14,7 +14,7 @@ Endterm project for AI Fundamentals (AIF1303), QAIRU, Fall 2026, by Akhmetzhan T
 - **Views:** the words at the bottom right, in two groups. For the book: Read (R) leans over the open spread; Watch (W) brings your eyes level with the pages, so only the pop-ups show; Top (T) looks straight down, so they line up flat. For the room: Desk (H); Room (O, or Escape), the whole board and desk, where it opens; Board (B), the evidence board square on.
 - **Read on a phone:** it frames one page. Swipe sideways to slide to the other open page.
 - **Keyboard camera:** ↑ ↓ tilt, A D orbit, + − zoom.
-- **Orbit:** the camera goes all the way round. The wall shortens its radius on the bearings that would pass through it, and with its back to the wall it looks down on the desk; view buttons take the short way home.
+- **Orbit:** the camera goes all the way round. The wall shortens its radius on the bearings that would pass through it, and with its back to the wall it looks down on the desk; view buttons take the short way home. None of that touches the framing asked for, so a full turn comes back to it.
 - **Sound:** M, or the words at the bottom left. Sound starts after your first click: light rain at the window, distant thunder after the lightning, the desk clock, and the pages.
 - **Screen readers:** the text of the open spread is mirrored into the page as plain HTML and announced when the spread changes.
 
