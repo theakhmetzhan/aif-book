@@ -23,7 +23,9 @@ button{font:inherit;color:inherit}
 #loader img{position:absolute;left:50%;top:50%;height:min(100%,100vw*67/79);transform:translate(-50%,-50%)}
 @media (max-aspect-ratio:17/20){#loader img{width:100%;height:100%;object-fit:cover}}
 body.ready #loader{opacity:0;pointer-events:none}
-#loader .t{position:relative;font:700 34px 'Playfair Display',serif;letter-spacing:.3em;color:var(--fg);opacity:.9;text-shadow:var(--halo)}
+/* the title's own face: it waits for the real letters, where the page's fonts would show a stand-in and swap it */
+@font-face{font-family:'Title';font-weight:700;font-display:block;src:url(/fonts/playfairdisplay-v40-nuFiD-vYSZviVYUb_rj3ij__anPXDTzYgEM86xQ.woff2) format('woff2')}
+#loader .t{position:relative;font:700 34px/46px 'Title',serif;letter-spacing:.3em;color:var(--fg);opacity:.9;text-shadow:var(--halo)}
 #loader .bar{position:relative;width:110px;height:1px;background:var(--edge);overflow:hidden}
 #loader .bar i{display:block;width:40%;height:100%;background:var(--acc);animation:ld 1.4s ease-in-out infinite}
 @keyframes ld{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
