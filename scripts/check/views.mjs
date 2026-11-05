@@ -20,7 +20,7 @@ const measure = async base => {
   const pageY = x => { const r = new T.Raycaster(new T.Vector3(x, 30, 9.4), new T.Vector3(0, -1, 0)); return r.intersectObject(bk.group, true)[0]?.point.y; }; // past every pop-up's foot
   const px = (a, W, H) => { const q = a.clone().project(cam); return [(q.x + 1) / 2 * W, (1 - q.y) / 2 * H]; };
   const frame = () => { const c = cam.position, seen = pops().map(a => a.clone().project(cam)); return { eye: c.y, left: pageY(-7), right: pageY(7), popsOut: seen.filter(q => Math.abs(q.x) > 1 || Math.abs(q.y) > 1).length, pops: seen.length }; };
-  const fan = (W, H) => { const foot = Math.min(pageY(-7), pageY(7)); let worst = 0; for (const a of pops()) { const p = px(a, W, H), f = px(new T.Vector3(a.x, foot, a.z), W, H); worst = Math.max(worst, Math.hypot(p[0] - f[0], p[1] - f[1])); } return worst; };
+  const fan = (W, H) => { const foot = { L: pageY(-7), R: pageY(7) }; let worst = 0; for (const a of pops()) { const p = px(a, W, H), f = px(new T.Vector3(a.x, a.x < 0 ? foot.L : foot.R, a.z), W, H); worst = Math.max(worst, Math.hypot(p[0] - f[0], p[1] - f[1])); } return worst; };
   const box = (W, H) => { const x = points().map(a => a.x), l = px(new T.Vector3(Math.min(...x), 1, 0), W, H)[0], r = px(new T.Vector3(Math.max(...x), 1, 0), W, H)[0]; return (l + r) / 2 - W / 2; };
   const crease = (W, H) => px(new T.Vector3(bk.group.position.x + bk.centerX(), 1, 0), W, H)[0] - W / 2; // mid-turn the block's outline swings with the leaf: this is what stays put
   const board = () => { const { z, xs, ys } = B.boardBox, c = [[xs[0], ys[1]], [xs[1], ys[1]], [xs[0], ys[0]], [xs[1], ys[0]]].map(([x, y]) => new T.Vector3(x, y, z).project(cam)); return { c: c.map(q => [q.x, q.y]) }; };
