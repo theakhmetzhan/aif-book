@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import QRCode from 'qrcode';
 import { T } from './theme.js';
@@ -12,6 +11,7 @@ import { buildScene, installDarkness, roomEnvironment, DESK_Y, BOARD } from './s
 import { CameraRig } from './controls.js';
 import { Ambience } from './audio.js';
 import { makeCardCanvas } from './card.js';
+import { Resolution } from './resolution.js';
 import './style.css';
 
 const qs = new URLSearchParams(location.search);
@@ -60,7 +60,9 @@ async function start() {
   const FOV = +(qs.get('fov') || 38), cam = new THREE.PerspectiveCamera(FOV, canvas.clientWidth / canvas.clientHeight, 2, 900);
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
   const pickAt = (x, y, objs) => { ndc.set(x / canvas.clientWidth * 2 - 1, -(y / canvas.clientHeight) * 2 + 1); ray.setFromCamera(ndc, cam); return ray.intersectObjects(objs, true)[0] || null; };
-  const rig = new CameraRig(cam, canvas, { pick: (x, y) => pickAt(x, y, room.pickables)?.point || null, limits: { rMax: 500 } }); // far enough for a phone to fit the whole board
+  // a pinch asks what lies under it on every move of either finger, and the answer hardly changes: a ray through the room is the dearest thing a pinch does
+  let under = null; const pickUnder = (x, y) => { const t = performance.now(); if (!under || t - under.t > 250 || Math.hypot(x - under.x, y - under.y) > 24) under = { x, y, t, point: pickAt(x, y, room.pickables)?.point || null }; return under.point; };
+  const rig = new CameraRig(cam, canvas, { pick: pickUnder, limits: { rMax: 500 } }); // far enough for a phone to fit the whole board
   const hq = qs.get('home')?.split(',').map(Number);
   let userMoved = false, view = 'room', side = 0; // side: the page a phone's Read is on, 0 until it is swiped
   const tan = fov => Math.tan(THREE.MathUtils.degToRad(fov / 2)), shut = () => { const ri = Math.round(target); return ri === 0 || ri === N; };
@@ -101,26 +103,23 @@ async function start() {
   const composer = new EffectComposer(renderer, rt);
   composer.addPass(new RenderPass(scene, cam));
   const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.32, 0.55, 1.6); composer.addPass(bloom);
-  composer.addPass(new OutputPass());
-  const film = new ShaderPass({
-    uniforms: { tDiffuse: { value: null }, uT: { value: 0 }, uGrain: { value: 0.045 }, uVig: { value: 0.42 }, uAspect: { value: 1 } },
-    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: `uniform sampler2D tDiffuse; uniform float uT, uGrain, uVig, uAspect; varying vec2 vUv;
-      float h(vec2 p){ p = fract(p * vec2(443.897, 441.423)); p += dot(p, p.yx + 19.19); return fract((p.x + p.y) * p.x); }
-      void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb;
+  // the glow, the tone curve and the film all take the whole picture: one pass at the end does the three, so bloom does not draw back over the multisampled picture and neither of the others needs a multisampled buffer of its own
+  const quad = bloom._fsQuad, blur = quad.render; quad.render = r => { if (quad.material !== bloom.blendMaterial) blur.call(quad, r); };
+  const film = new OutputPass(); film.needsSwap = false; Object.assign(film.uniforms, { tBloom: { value: bloom.renderTargetsHorizontal[0].texture }, uT: { value: 0 }, uGrain: { value: 0.045 }, uVig: { value: 0.42 }, uAspect: { value: 1 } });
+  film.material.fragmentShader = film.material.fragmentShader.replace('uniform sampler2D tDiffuse;', `uniform sampler2D tDiffuse, tBloom; uniform float uT, uGrain, uVig, uAspect;
+      float h(vec2 p){ p = fract(p * vec2(443.897, 441.423)); p += dot(p, p.yx + 19.19); return fract((p.x + p.y) * p.x); }`).replace('gl_FragColor = texture2D( tDiffuse, vUv );', 'gl_FragColor = vec4(texture2D(tDiffuse, vUv).rgb + texture2D(tBloom, vUv).rgb, 1.0);').replace(/}\s*$/, `vec3 c = gl_FragColor.rgb;
         vec2 q = (vUv - 0.5) * vec2(uAspect, 1.0); float v = 1.0 - uVig * smoothstep(0.35, 1.05, length(q) * 1.15); c *= v;
         float l = dot(c, vec3(0.299, 0.587, 0.114)); float n = (h(vUv * 1024.0 + fract(uT * 7.31) * 97.0) - 0.5) * uGrain * (0.35 + 0.65 * (1.0 - l));
-        c += n; gl_FragColor = vec4(c, 1.0); }`,
-  });
+        gl_FragColor = vec4(c + n, 1.0); }`);
   composer.addPass(film);
 
-  // the picture takes its size from the canvas's own box, checked before every frame, so the two always match: on a phone the window's height moves with the address bar
+  // the picture takes its shape from the canvas's own box, checked before every frame, so it cannot show stretched: on a phone the window's height moves with the address bar
   let boxW, boxH;
+  const shape = () => { cam.aspect = boxW / boxH; cam.updateProjectionMatrix(); film.uniforms.uAspect.value = cam.aspect; };
   const resize = () => {
     boxW = canvas.clientWidth; boxH = canvas.clientHeight;
     renderer.setPixelRatio(dpr); renderer.setSize(boxW, boxH, false); composer.setPixelRatio(dpr); composer.setSize(boxW, boxH);
-    bloom.resolution.set(boxW / 2, boxH / 2);
-    cam.aspect = boxW / boxH; cam.updateProjectionMatrix(); film.uniforms.uAspect.value = cam.aspect;
+    bloom.resolution.set(boxW / 2, boxH / 2); shape();
   };
   resize();
 
@@ -198,12 +197,19 @@ async function start() {
   });
 
   // ---------- loop ----------
-  const clock = new THREE.Timer(); let first = true, shadowTick = 0, calm = 0, shown = -1; const ft = [];
+  const clock = new THREE.Timer(); let first = true, shadowTick = 0, calm = 0, shown = -1, rest = false, newBox = -1; const ft = [];
   const freeze = !!qs.get('freeze'), tFix = qs.get('t') ? +qs.get('t') : null; room.freeze = freeze;
   if (freeze) { p = target = +(qs.get('p') ?? 0); }
+  const res = mobile && !freeze && !qs.get('dpr') ? new Resolution(dprMax) : null;
+  const { lamp, win } = room; lamp.shadow.autoUpdate = win.shadow.autoUpdate = !mobile; // a phone says when each map is drawn: see below
+  const moves = () => !!rig.drag || rig.moving || Math.abs(target - p) > 1e-4 || Math.abs(pv) > 1e-4;
   function frame() {
-    if (canvas.clientWidth !== boxW || canvas.clientHeight !== boxH) { resize(); if (!userMoved && !qs.get('cam')) goView(view, true); }
-    clock.update(); const dt = Math.min(0.05, clock.getDelta()), el = tFix ?? (reduced ? 4 : clock.getElapsed());
+    // new buffers cost far more than a new shape, so they wait until the box has held still for a few frames
+    if (canvas.clientWidth !== boxW || canvas.clientHeight !== boxH) { boxW = canvas.clientWidth; boxH = canvas.clientHeight; shape(); newBox = 0; if (!userMoved && !qs.get('cam')) goView(view, true); }
+    if (newBox >= 0 && ++newBox > 3) { newBox = -1; resize(); }
+    // a phone at rest draws every other frame: nothing still needs more than 30, and a phone that runs cooler keeps its speed for when the hand comes back
+    if (mobile && !first && !freeze && !qs.get('shot') && !moves() && (rest = !rest)) { requestAnimationFrame(frame); return; }
+    clock.update(); const real = clock.getDelta(), dt = Math.min(0.05, real), el = tFix ?? (reduced ? 4 : clock.getElapsed());
     // page spring: critically damped, capped speed for long jumps
     if (!freeze) {
       const w = reduced ? 9 : 6.2; pv += (w * w * (target - p) - 2 * w * pv) * dt; pv = Math.max(-5, Math.min(5, pv)); p += pv * dt;
@@ -213,21 +219,31 @@ async function start() {
     book.set(+p.toFixed(5), el, hoverK);
     book.group.position.x = -book.centerX(p);
     rig.update(first ? 1 : dt);
-    room.tick(el, dt, cam);
+    const moving = moves(); if (mobile) room.rainStep = moving ? 1 / 15 : 1 / 30; // no one reads the rain while the view is sweeping
+    const busy = Math.abs(target - p) > 1e-4 || Math.abs(pv) > 1e-4 || Math.abs(hoverK) > 1e-3 && Math.abs(hoverK - (Math.abs(target - p) < 0.02 ? hover : 0)) > 1e-3;
+    room.busy = busy; room.tick(el, dt, cam);
     audio.update(dt);
     const ri = Math.round(target);
     if (ri !== shown) { shown = ri; readSpread(ri); }
     film.uniforms.uT.value = el;
     // shadows: every frame while anything that casts them moves, otherwise a few times a second for the drifting paper
-    const busy = Math.abs(target - p) > 1e-4 || Math.abs(pv) > 1e-4 || Math.abs(hoverK) > 1e-3 && Math.abs(hoverK - (Math.abs(target - p) < 0.02 ? hover : 0)) > 1e-3;
-    if (busy || first || ++shadowTick % 4 === 0) renderer.shadowMap.needsUpdate = true;
+    // both maps take more draws than the picture does, and a camera move changes neither. The lamp's holds the book, so it follows the pages; the window's holds the paper on the board, the only thing it lights that moves. One at a time when at rest, so no frame pays for both
+    if (mobile) { if (first || busy) lamp.shadow.needsUpdate = true; if (first) win.shadow.needsUpdate = true; else if (!moving) { shadowTick++; if (shadowTick % 6 === 0) win.shadow.needsUpdate = true; else if (shadowTick % 30 === 3) lamp.shadow.needsUpdate = true; } if (lamp.shadow.needsUpdate || win.shadow.needsUpdate) renderer.shadowMap.needsUpdate = true; }
+    else if (busy || first || ++shadowTick % 4 === 0) renderer.shadowMap.needsUpdate = true;
     composer.render(dt);
     // keep it smooth: lower the resolution while frames run long, raise it again when there is room
-    if (!freeze && !qs.get('dpr')) { ft.push(clock.getDelta() * 0 + dt); if (ft.length > 45) { const a = ft.reduce((x, y) => x + y, 0) / ft.length; ft.length = 0;
+    if (res) { const to = res.frame(real, moving); if (to) { dpr = to; resize(); } } // the true length: past the cap, a very slow phone's gains would not show
+    else if (!mobile && !freeze && !qs.get('dpr')) { ft.push(clock.getDelta() * 0 + dt); if (ft.length > 45) { const a = ft.reduce((x, y) => x + y, 0) / ft.length; ft.length = 0;
       if (a > 0.024 && dpr > 1) { dpr = Math.max(1, dpr - 0.25); resize(); } else if (a < 0.0125 && dpr < dprMax && ++calm > 4) { dpr = Math.min(dprMax, dpr + 0.25); resize(); calm = 0; } } }
     first = false;
     requestAnimationFrame(frame);
   }
+  // what only shows later goes to the GPU now, behind the loader, so no spread stops mid-turn for its first upload. Once it has, a canvas or bitmap is only a second copy, which a phone cannot spare
+  const maps = new Map(); scene.traverse(o => { for (const m of [o.material].flat()) if (m) for (const v of Object.values(m)) if (v?.isTexture) maps.set(v.source, [...(maps.get(v.source) ?? []), v]); });
+  maps.forEach((ts, s) => { ts.forEach(t => renderer.initTexture(t)); if (s.data?.getContext) s.data.width = s.data.height = 0; else s.data?.close?.(); });
+  // and one rehearsal with every pop-up out, so the first sight of anything builds no shader and no buffer: the first frame puts them away again
+  for (const f of book.faces) f.root.visible = true;
+  lamp.shadow.needsUpdate = win.shadow.needsUpdate = renderer.shadowMap.needsUpdate = true; composer.render(0);
   window.__book = { audio, cam, rig, renderer, scene, book, room, goView, boardBox: { z: BOARD.z, xs: [-BOARD.w / 2, BOARD.w / 2], ys: [BOARD.y0, BOARD.y0 + BOARD.h] }, set: pp => { target = p = pp; pv = 0; }, get p() { return p; }, get target() { return target; }, get view() { return view; } };
   document.body.classList.add('ready');
   requestAnimationFrame(frame);
