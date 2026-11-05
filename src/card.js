@@ -220,7 +220,7 @@ export function drawCard(ctx, W, H, { qr, cover } = {}) {
   const lastBody = y - lead;
   // filed by: baselines match the CTA and URL lines on the tag
   text(g, 'FILED BY', X, ctaBase, { font: `400 22px ${F.display}`, color: C.red, track: 3.3 });
-  text(g, teamLine(), X, urlBase, { font: `700 24px ${F.body}`, color: C.ink });
+  text(g, teamLine(), X, urlBase, { font: `700 20px ${F.body}`, color: C.ink });
   if (lastBody + 18 > ctaBase - 22) console.warn('card: annotation runs into the filed-by block', { lines: lines.length });
   g.restore();
   return { s, qrModules: n, qrPx: Math.round(G.qr * s), quietPx: Math.round(G.pad * s), lines: lines.length };
