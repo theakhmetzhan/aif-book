@@ -1,6 +1,6 @@
 // Every face of every sheet: what is printed (canvas) and which pop-up stands on it. Face coords: x → right, v ↓ down the page, page 14 × 20.
 import { Page, INK, INK2, ACCENT, INDIGO, SERIF, DISPLAY, TITLE, HAND } from './typeset.js';
-import { paperFill, pageShade, endpaper, clothFill, goldGradient, rng } from './paper.js';
+import { paperFill, paperGrain, pageShade, pastedown, clothFill, goldGradient, rng } from './paper.js';
 import { T } from './theme.js';
 import graph from './data/graph.json';
 import hills from './data/hills.json';
@@ -99,6 +99,53 @@ function hillPrint(g, S) {
   dots(HILL.local.path, INDIGO); dots(HILL.global.path, ACCENT);
 }
 
+// ---------- endpapers ----------
+// One map of the ground the cases cover, printed in the cloth's red on a manila stock and pasted to both boards: the roads of Exhibit 2.1 over the hills of Exhibit 3.1, whose
+// contours run on to the edge of the sheet, evenly spaced, so the landscape reads as a fingerprint. In front the trail is still to walk; at the back the string marks what was found.
+let survey = null;
+function surveyLines() { // marching squares, once for both boards: a path for the fine contours and one for every fifth, in page units
+  if (survey) return survey; survey = [new Path2D(), new Path2D()];
+  const d = 0.1, nx = 150, ny = 214, x0 = -0.5, v0 = -0.7, F = new Float32Array((nx + 1) * (ny + 1));
+  for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) F[j * (nx + 1) + i] = Math.sqrt(2 * Math.log(11 / fHill(x0 + i * d, v0 + j * d))) / 0.088; // a hill's height as its distance from the summit, which is what spaces the lines: about 0.3 apart far out
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const a = F[j * (nx + 1) + i], b = F[j * (nx + 1) + i + 1], c = F[(j + 1) * (nx + 1) + i + 1], e = F[(j + 1) * (nx + 1) + i], x = x0 + i * d, v = v0 + j * d;
+    for (let L = Math.ceil(Math.min(a, b, c, e)); L < Math.max(a, b, c, e); L++) {
+      const hit = []; if ((a < L) !== (b < L)) hit.push([x + d * (L - a) / (b - a), v]); if ((b < L) !== (c < L)) hit.push([x + d, v + d * (L - b) / (c - b)]); if ((e < L) !== (c < L)) hit.push([x + d * (L - e) / (c - e), v + d]); if ((a < L) !== (e < L)) hit.push([x, v + d * (L - a) / (e - a)]);
+      const p = survey[L % 5 ? 0 : 1]; for (let k = 0; k + 1 < hit.length; k += 2) { p.moveTo(...hit[k]); p.lineTo(...hit[k + 1]); }
+    }
+  }
+  return survey;
+}
+function endpaperPrint(g, S, w, h, spine, title, caption) {
+  const back = spine === 'left', P = new Page(g, S), RED = T.cloth, x0 = back ? 1.05 : 0.95, x1 = x0 + 12.3, y0 = 0.95, y1 = 19.65, cx = (x0 + x1) / 2, ox = cx - 7, oy = 0.3; // the neat line, a little further from the spine; the book's page coordinates sit in the middle of it
+  const X = n => (n.x + ox) * S, V = n => (n.v + oy) * S;
+  const ruled = (a, b, c, e) => { g.strokeStyle = RED; g.lineWidth = 0.04 * S; g.strokeRect(a * S, b * S, (c - a) * S, (e - b) * S); g.lineWidth = 0.014 * S; g.strokeRect((a + 0.11) * S, (b + 0.11) * S, (c - a - 0.22) * S, (e - b - 0.22) * S); }; // ruled as the cover is
+  g.fillStyle = T.endpaper; g.fillRect(0, 0, w, h);
+  g.save(); g.beginPath(); g.rect(x0 * S, y0 * S, (x1 - x0) * S, (y1 - y0) * S); g.clip();
+  g.save(); g.scale(S, S); g.translate(ox, oy); g.lineCap = 'round'; g.strokeStyle = RED; const [fine, fifth] = surveyLines();
+  g.globalAlpha = 0.5; g.lineWidth = 0.014; g.stroke(fine); g.globalAlpha = 0.72; g.lineWidth = 0.032; g.stroke(fifth); g.restore();
+  g.strokeStyle = INK; g.globalAlpha = 0.85; g.lineWidth = 0.035 * S; g.setLineDash([0.16 * S, 0.11 * S]);
+  for (const [a, b] of G.edges) { g.beginPath(); g.moveTo(X(G.by[a]), V(G.by[a])); g.lineTo(X(G.by[b]), V(G.by[b])); g.stroke(); }
+  g.setLineDash([]); g.globalAlpha = 1;
+  if (back) { // the string, and the two climbs of Exhibit 3.1
+    g.strokeStyle = ACCENT; g.lineWidth = 0.075 * S; g.lineJoin = 'round'; g.beginPath(); G.astar.path.forEach((id, i) => i ? g.lineTo(X(G.by[id]), V(G.by[id])) : g.moveTo(X(G.by[id]), V(G.by[id]))); g.stroke();
+    for (const [path, col] of [[HILL.local.path, INDIGO], [HILL.global.path, ACCENT]]) path.forEach(([x, v], k) => { g.fillStyle = col; g.beginPath(); g.arc((x + ox) * S, (v + oy) * S, (k === 0 ? 0.12 : 0.07) * S, 0, 7); g.fill(); });
+  }
+  P._quiet = true; // the map's letters are not read out: the pages say it all
+  for (const n of G.nodes) {
+    const on = back && G.astar.path.includes(n.id);
+    g.fillStyle = T.endpaper; g.strokeStyle = on ? ACCENT : INK; g.lineWidth = (on ? 0.05 : 0.035) * S; g.beginPath(); g.arc(X(n), V(n), 0.36 * S, 0, 7); g.fill(); g.stroke();
+    P.text(n.id, n.x + ox, n.v + oy + 0.02, { font: `${B} ${0.33 * S}px ${SERIF}`, color: on ? ACCENT : INK, align: 'center', baseline: 'middle' });
+  }
+  P._quiet = false; g.restore();
+  // the title, on a panel of bare stock
+  const a = cx - 4.2, b = cx + 4.2, c = 15.75, e = 18.95; g.fillStyle = T.endpaper; g.fillRect(a * S, c * S, (b - a) * S, (e - c) * S); ruled(a, c, b, e); ruled(x0, y0, x1, y1);
+  P.text('CASE FILE  No. AIF-1303', cx, 16.55, { font: `400 ${0.27 * S}px ${DISPLAY}`, color: RED, align: 'center', spacing: 0.08 });
+  P.text(title, cx, 17.6, { font: `700 ${0.74 * S}px ${TITLE}`, color: INK, align: 'center' });
+  P.text(caption, cx, 18.35, { font: `italic 400 ${0.27 * S}px ${SERIF}`, color: INK, align: 'center' });
+  paperGrain(g, w, h, 0.5, 9); pastedown(g, S, w, h, spine);
+}
+
 // ---------- cover art (colour pass or foil mask) ----------
 function coverArt(g, S, w, h, mask) {
   const cx = 7.25 * S, F = c => mask ? '#fff' : c;
@@ -138,7 +185,7 @@ export const FACES = {
     kind: 'board', draw(g, S, w, h) { clothFill(g, w, h, T.cloth); coverArt(g, S, w, h, false); },
     gold: T.foil ? (g, S, w, h) => { g.fillStyle = '#000'; g.fillRect(0, 0, w, h); coverArt(g, S, w, h, true); } : null,
   },
-  endFront: { kind: 'board', draw: (g, S, w, h) => endpaper(g, w, h, S, T.endpaper) },
+  endFront: { kind: 'board', draw: (g, S, w, h) => endpaperPrint(g, S, w, h, 'right', 'The Ground to Cover', 'From the office, S, to the scene, G') },
   title: {
     side: 'R', num: 1, draw(g, S, w, h) {
       pageBase(g, w, h, 'left', 4); const P = new Page(g, S);
@@ -294,7 +341,7 @@ export const FACES = {
       stamp(g, S, 'CASE OPEN', 9.8, 17.4, { rot: -0.18, size: 0.5 });
     },
   },
-  endBack: { kind: 'board', draw: (g, S, w, h) => endpaper(g, w, h, S, T.endpaper) },
+  endBack: { kind: 'board', draw: (g, S, w, h) => endpaperPrint(g, S, w, h, 'left', 'The Ground Covered', 'S → C → F → G, cost 14 · high ground 10.3') },
   back: {
     kind: 'board', draw(g, S, w, h, extra) {
       clothFill(g, w, h, T.cloth);

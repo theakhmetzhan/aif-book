@@ -28,6 +28,7 @@ const COMPLAINTS = [
   ['CP1', 'wide dark strip between the left page and the back board', 'owner-top at 1 and 7'],
   ['CP1', 'the back board is a ramp hanging in the air', 'owner-low at every state'],
   ['CP1', 'a few thick dark and pale bands, not a block of paper', 'owner-low, tail at every state'],
+  ['5', 'redesign the inner design of the covers, it\'s currently cheap, random, halfdone - i want it to match the book and the rest of the scene', 'top, owner-top, spine at 0 to 1 and 7 to 8'],
 ];
 const views = viewArg && viewArg !== 'all' ? viewArg.split(',').filter(v => VIEWS[v]) : Object.keys(VIEWS), rain = !viewArg || viewArg === 'all' || viewArg.split(',').includes('rain');
 const states = stateArg ? stateArg.split(',').map(Number) : Array.from({ length: 65 }, (_, i) => i / 8), rests = [0, 1, 2, 3, 4, 5, 6, 7, 8];

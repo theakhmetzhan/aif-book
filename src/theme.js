@@ -7,7 +7,7 @@ export const T = {
   body: '"Courier Prime", "Courier New", monospace', bold: 700, display: '"Special Elite", "Courier Prime", monospace', title: '"Playfair Display", Georgia, serif', hand: '"Caveat", cursive', mono: '"Courier Prime", monospace',
   bodySize: 0.325, lead: 0.5, justify: false,
   // binding
-  cloth: '#5b1e1a', clothSide: '#3e1512', foil: true, endpaper: ['#6f5233', 'rgba(239,227,200,.22)', 'rgba(239,227,200,.38)'],
+  cloth: '#5b1e1a', clothSide: '#3e1512', foil: true, endpaper: '#b9a380',
   // room
   bg: '#000000', string: '#a8231b', twine: '#a88a5e',
 };
