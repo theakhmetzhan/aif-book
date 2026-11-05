@@ -1,8 +1,8 @@
 // Frame cost while navigating, in WebKit and Chromium, at a phone's window and pixel ratio with the app's mobile path on, and on a desktop window. A desktop machine stands in for a phone here: milliseconds are this machine's, so read them as before against after, never as a phone's numbers.
 // Everything is hooked from outside the app, so the same script measures any build. One route plays in every run: rest, drag, fly to Read, swipe, turn pages, fly to Desk, drag and pinch, Board, Top, Watch, Room.
 // Three passes of the route, because measuring disturbs: `time` hooks only the frame and its stages; `count` counts every GL call, upload and allocation; `gpu` waits for the GPU each time the kind of pass changes. The GPU's clock follows its load, so `gpu` varies by a third from run to run: read it for shares.
-// `peak` is the number to compare builds by: Chromium with the display's limit off, dragging, frames as fast as they come, which holds to about 1% from run to run.
-// Then what a route cannot show, on the phone only: `read` goes through every spread and back and compares each first showing with the second; `bar` slides an address bar; `pace` holds frames to a slow device's rate and watches the resolution answer.
+// `peak` is the number to compare builds by: Chromium with the display's limit off, dragging, frames as fast as they come. Back to back it holds to about 1%, but what else the machine is doing moves every figure, by half between sessions here: run both builds together and read the ratio.
+// Then what a route cannot show, on the phone only: `read` goes through every spread and back, compares each first showing with the second and counts what still went to the GPU; `bar` slides an address bar; `pace` holds frames to a slow device's rate and watches the resolution answer.
 // Only what does not depend on this machine can fail the check: draws, uploads, shadow maps drawn while the camera moves, copies held in memory, buffers remade, the resolution's answers. The same limits run against any build, so an older one is the control: it has to fail.
 // Needs: npx playwright-core install webkit. usage: URL=http://localhost:5181/aif-book/ node scripts/check/perf.mjs [out.json] [only=WebKit,Chromium] [pass=time,count,gpu,peak,read,bar,pace] [against=before.json]
 import { webkit, chromium } from 'playwright-core';
@@ -28,18 +28,18 @@ const hooks = pass => {
   const P = window.__perf = { raf, last: 0, pace: null, on: false, phase: '', frames: [], cur: {}, gl: {}, shaders: [], tex: new Map(), rb: new Map(), buf: new Map(), load: {}, script: null };
   const paced = f => { if (!P.pace) return raf(f); const due = P.last + P.pace(), go = t => now() >= due - 1 ? f(t) : raf(go); raf(go); }; // a slower device: the frame waits for its time
   window.requestAnimationFrame = cb => paced(t => {
-    const a = now(); P.last = a; P.script?.(a); P.cur = {}; if (P.on) P.gl = {}; const heap = performance.memory?.usedJSHeapSize;
-    cb(t); P.endFrame?.(); const b = now(); if (window.__book?.renderer.info.render.frame) P.firstPicture ??= b; // the loader's work ends with the first drawn frame, whichever side of `ready` it is done on
+    const a = now(); P.last = a; P.script?.(a); P.cur = {}; if (P.on) P.gl = {}; const heap = performance.memory?.usedJSHeapSize, drawn = window.__book?.renderer.info.render.frame;
+    cb(t); P.endFrame?.(); const b = now(); if (window.__book && window.__book.renderer.info.render.frame !== drawn) P.firstPicture ??= b; // the loader's work ends with the first frame that draws, whichever side of `ready` it is done on
     if (P.on) P.frames.push({ t: a, cpu: b - a, phase: P.phase, heap, dpr: P.dpr?.(), st: P.cur, gl: P.gl, swept: P.swept?.() });
   });
-  if (pass !== 'count') return;
+  if (pass !== 'count' && pass !== 'read') return;
   const G = WebGL2RenderingContext.prototype, bump = (k, n = 1) => { P.gl[k] = (P.gl[k] || 0) + n; };
   const BPP = { 0x8058: 4, 0x8C43: 4, 0x881A: 8, 0x8814: 16, 0x8D62: 2, 0x8229: 1, 0x822B: 2, 0x8D48: 4, 0x81A5: 2, 0x81A6: 3, 0x81A7: 4, 0x8CAC: 4, 0x88F0: 4, 0x8CAD: 8, 0x822F: 4, 0x8230: 8 };
-  const bound = {}; let rbNow = null; const size = (w, h, f, lv = 1, d = 1) => { let s = 0; for (let i = 0; i < lv; i++) s += Math.max(1, w >> i) * Math.max(1, h >> i) * d * (BPP[f] || 4); return s; };
+  const bound = {}; let rbNow = null; const tris = (k, a) => a[0] !== 4 ? 0 : (k.startsWith('drawArrays') ? a[2] : k === 'drawRangeElements' ? a[3] : a[1]) / 3 * (k.endsWith('Instanced') ? a.at(-1) : 1), size = (w, h, f, lv = 1, d = 1) => { let s = 0; for (let i = 0; i < lv; i++) s += Math.max(1, w >> i) * Math.max(1, h >> i) * d * (BPP[f] || 4); return s; };
   for (const k of Object.getOwnPropertyNames(G)) { const d = Object.getOwnPropertyDescriptor(G, k); if (typeof d.value !== 'function') continue; const f = d.value;
     const draw = /^(drawArrays|drawElements|drawArraysInstanced|drawElementsInstanced|drawRangeElements)$/.test(k), data = /^(texImage2D|texSubImage2D|texImage3D|texSubImage3D|bufferData|bufferSubData)$/.test(k);
     G[k] = function (...a) { bump('calls');
-      if (draw) bump('draws');
+      if (draw) { bump('draws'); bump('tris', tris(k, a)); }
       else if (k === 'bindTexture') bound[a[0]] = a[1];
       else if (k === 'bindRenderbuffer') rbNow = a[1];
       else if (k === 'bindBuffer') bound[a[0]] = a[1];
@@ -111,10 +111,10 @@ function timeStats(F) {
   return { all: s(F.slice(1), gap), byPhase, stages: st, allocMBs: r(heapUp / sec / 1048576), heapDrops, dpr: { first: dprs[0], last: dprs.at(-1), min: Math.min(...dprs), changes }, seconds: r(sec, 1) };
 }
 function countStats(F, extra) {
-  const per = k => r(mean(F.map(f => f.gl[k] || 0)), 1), max = k => Math.max(...F.map(f => f.gl[k] || 0)); const byPhase = {};
-  for (const ph of new Set(F.map(f => f.phase))) { const fs = F.filter(f => f.phase === ph); byPhase[ph] = { draws: r(mean(fs.map(f => f.gl.draws || 0)), 1), calls: r(mean(fs.map(f => f.gl.calls || 0)), 1), drawsMax: Math.max(...fs.map(f => f.gl.draws || 0)) }; }
+  const drew = F.filter(f => f.gl.draws), per = k => r(mean(drew.map(f => f.gl[k] || 0)), 1), max = k => Math.max(...F.map(f => f.gl[k] || 0)); const byPhase = {}; // a frame a phone skips at rest draws nothing, and would flatter the mean
+  for (const ph of new Set(F.map(f => f.phase))) { const fs = drew.filter(f => f.phase === ph); byPhase[ph] = { draws: r(mean(fs.map(f => f.gl.draws || 0)), 1), tris: Math.round(mean(fs.map(f => f.gl.tris || 0))), calls: r(mean(fs.map(f => f.gl.calls || 0)), 1), drawsMax: Math.max(...fs.map(f => f.gl.draws || 0)) }; }
   const swept = F.filter(f => f.swept);
-  return { swept: swept.length, sweptShadows: swept.filter(f => f.st.shadows).length, draws: per('draws'), drawsMax: max('draws'), calls: per('calls'), callsMax: max('calls'), fbo: per('fbo'), programs: per('programs'), texKBPerFrame: r(mean(F.map(f => (f.gl.texBytes || 0) / 1024)), 1), bufKBPerFrame: r(mean(F.map(f => (f.gl.bufBytes || 0) / 1024)), 1), byPhase, ...extra };
+  return { swept: swept.length, sweptShadows: swept.filter(f => f.st.shadows).length, draws: per('draws'), drawsMax: max('draws'), tris: Math.round(per('tris')), trisMax: max('tris'), calls: per('calls'), callsMax: max('calls'), fbo: per('fbo'), programs: per('programs'), texKBPerFrame: r(mean(F.map(f => (f.gl.texBytes || 0) / 1024)), 1), bufKBPerFrame: r(mean(F.map(f => (f.gl.bufBytes || 0) / 1024)), 1), byPhase, ...extra };
 }
 function gpuStats(F, wait) { const byPhase = {}, frameMs = f => Object.entries(f.st).reduce((a, [k, v]) => a + (k.startsWith('gpu:') ? v : 0), 0) - (f.st.waits || 0) * wait; for (const ph of new Set(F.map(f => f.phase))) { const fs = F.filter(f => f.phase === ph), drawn = fs.filter(f => f.st.waits); byPhase[ph] = { ms: r(mean(drawn.map(frameMs))), drawnPerSec: r(drawn.length / (fs.reduce((a, f, i) => a + (i ? Math.min(100, f.t - fs[i - 1].t) : 0), 0) / 1000), 0) }; } const st = {}; for (const f of F) for (const [k, v] of Object.entries(f.st)) if (k.startsWith('gpu:')) st[k] = (st[k] || 0) + v; const waits = mean(F.map(f => f.st.waits || 0)), kinds = Object.keys(st).length; for (const k in st) st[k] = r(st[k] / F.length, 3); const total = Object.values(st).reduce((a, v) => a + v, 0) - waits * wait; return { byPhase, perFrame: st, wait: r(wait, 3), waitsPerFrame: r(waits, 1), total: r(total, 2), shadowsPerFrame: r(mean(F.map(f => f.st.shadows || 0)), 3), kinds }; }
 
@@ -140,19 +140,20 @@ const flatOut = () => new Promise(done => { // each view with a finger on it, as
   const ev = (t, x, y) => g.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, button: t === 'pointermove' ? -1 : 0 }));
   const views = ['room', 'book', 'desk']; (async () => { for (const v of views) { B.goView(v, true); await new Promise(r => setTimeout(r, 300)); ev('pointerdown', 200, 300); let i = 0; const mv = setInterval(() => ev('pointermove', 200 + 40 * Math.sin(++i / 8), 300), 8); await new Promise(r => setTimeout(r, 500)); let n = 0; const t0 = performance.now(); await new Promise(r => { const f = () => { n++; performance.now() - t0 < 2500 ? requestAnimationFrame(f) : r(); }; f(); }); out[v] = +(2500 / n).toFixed(2); clearInterval(mv); ev('pointerup', 200, 300); B.goView(v, true); } done(out); })();
 });
-const CASES = { saving: ['33.4', 11, 'a phone saving power: 30 fps whatever is drawn'], fill: ['30 * (dpr / 1.5) ** 2', 7, 'too many pixels: 30 ms at 1.5, and less as it draws less'], hitch: ['performance.now() % 3000 < 34 ? 400 : 0', 7, 'a hitch now and then, on a phone with room to spare'] };
+const CASES = { saving: ['33.4', 11, 'a phone saving power: 30 fps whatever is drawn'], fill: ['30 * (dpr / 1.5) ** 2', 7, 'too many pixels: 30 ms at 1.5, and less as it draws less'], hitch: ['performance.now() % 3000 < 34 ? 400 : 0', 7, 'a hitch now and then, on a phone with room to spare'], crawl: ['120 * (dpr / 1.5) ** 2', 24, 'far too many pixels: 120 ms at 1.5, 53 at 1'] };
 
 // the answer to a slow run, against a clock that does not need a device: every case the app has to get right, on the numbers alone
 async function logic() {
   const { Resolution } = await import(new URL('../../src/resolution.js', import.meta.url)).catch(() => ({})); if (!Resolution) return null;
-  const run = (frames, r = new Resolution(1.5)) => { const seen = [r.now]; for (const [dt, moving] of frames(r)) { const to = r.frame(dt, moving); if (to) seen.push(to); } return { seen, r }; };
+  const run = (frames, r = new Resolution(1.5)) => { const seen = [r.now], at = [0]; for (const [dt, moving] of frames(r)) { const to = r.frame(dt, moving); if (to) { seen.push(to); at.push(r.clock); } } return { seen, at }; };
   const for_ = (sec, dt, moving) => function* () { for (let t = 0; t < sec; t += dt) yield [dt, moving]; };
   const out = {};
   out.steady = run(for_(120, 1 / 60, true)).seen; // 60 fps for two minutes: nothing changes
   out.saving = run(for_(60, 1 / 30, true)).seen; // 30 fps whatever is drawn: it tries, and goes back
   out.fill = run(function* (r) { for (let t = 0; t < 20;) { const dt = Math.max(1 / 60, 0.03 * (r.now / 1.5) ** 2); t += dt; yield [dt, true]; } }).seen;
   out.back = run(function* (r) { for (let t = 0; t < 5;) { const dt = Math.max(1 / 60, 0.03 * (r.now / 1.5) ** 2); t += dt; yield [dt, true]; } yield* for_(5, 1 / 60, true)(); for (let k = 0; k < 2; k++) yield* for_(40, 1 / 30, false)(); yield* for_(3, 1 / 60, true)(); }).seen; // the load eases: a still moment raises it
-  out.tries = run(function* (r) { for (let t = 0; t < 300;) { const dt = Math.max(1 / 60, 0.03 * (r.now / 1.5) ** 2); t += dt; yield [dt, true]; if (t % 20 < 0.03) yield* for_(40, 1 / 30, false)(); } }).seen; // and when it has no room, it keeps asking less and less often
+  const tries = run(function* (r) { for (let t = 0; t < 1500; t += 10) { for (let m = 0; m < 5;) { const dt = Math.max(1 / 60, 0.026 * (r.now / 1.5) ** 2); m += dt; yield [dt, true]; } yield* for_(5, 1 / 30, false)(); } }); // 26 ms at 1.5, 18 at 1.25: the lower step looks like room to rise, and the higher one never holds
+  const rises = tries.at.filter((_, i) => i && tries.seen[i] === 1.5); out.tries = tries.seen; out.waits = rises.slice(1).map((t, i) => Math.round(t - rises[i])); // so it asks less and less often
   return out;
 }
 
@@ -172,10 +173,10 @@ for (const run of RUNS) {
     await p.evaluate(() => new Promise(r => { let n = 0; const f = () => ++n > 120 ? r() : __perf.raf(f); f(); })); // past the first frames
     if (pass === 'peak') { const w = await p.evaluate(flatOut); report[run.name].peak = w; console.log(`${run.name}\tpeak\tms a frame ${JSON.stringify(w)}`); await b.close(); continue; }
     if (PHONE_ONLY.includes(pass)) {
-      if (pass === 'read') { await p.evaluate(() => { __perf.on = true; __perf.phase = 'first'; }); const w = await p.evaluate(reading), g = await p.evaluate(() => ({ up: __perf.load, links: __perf.shaders.filter(x => x !== 'load').length })); report[run.name].read = { ...w, firstWorst: r(Math.max(...w.first), 1), againWorst: r(Math.max(...w.again), 1) }; console.log(`${run.name}\tread\tworst gap on a first showing ${r(Math.max(...w.first), 1)} ms, the second time ${r(Math.max(...w.again), 1)} ms`); }
+      if (pass === 'read') { await p.evaluate(() => { __perf.on = true; __perf.phase = 'first'; }); const w = await p.evaluate(reading), g = await p.evaluate(() => ({ up: __perf.load, links: __perf.shaders.filter(x => x !== 'load').length })); report[run.name].read = { ...w, firstWorst: r(Math.max(...w.first), 1), againWorst: r(Math.max(...w.again), 1) }; const mb = r(Object.values(g.up).reduce((a, b) => a + b, 0) / 1048576, 1); report[run.name].read.uploadsMB = mb; report[run.name].read.links = g.links; console.log(`${run.name}\tread\tworst gap on a first showing ${r(Math.max(...w.first), 1)} ms, the second time ${r(Math.max(...w.again), 1)} ms, ${mb} MB uploaded, ${g.links} shaders built`); need(!mb, `${run.name}: ${mb} MB uploaded on the way through the book`); need(!g.links, `${run.name}: ${g.links} shaders built on the way through the book`); }
       if (pass === 'bar') { const w = await p.evaluate(sliding); report[run.name].bar = w; console.log(`${run.name}\tbar\t${w.made} buffer changes in 24 frames of sliding, worst gap ${r(w.worstGap, 1)} ms, picture off its box by ${r(w.off, 4)}`); need(w.made <= 2, `${run.name}: the picture's buffers were remade ${w.made} times while a bar slid`); need(w.off < 1e-6, `${run.name}: the picture's shape lagged its box`); need(Math.abs(w.buffer[1] / w.buffer[0] - w.box[1] / w.box[0]) < 0.01, `${run.name}: the buffer never caught up with the box`); }
       if (pass === 'pace') { const res = {}; for (const [k, [ms, sec]] of Object.entries(CASES)) { await p.reload(); await p.waitForFunction(() => document.body.classList.contains('ready'), null, { timeout: 240000 }); await p.evaluate(() => new Promise(r => { let n = 0; const f = () => ++n > 90 ? r() : __perf.raf(f); f(); })); res[k] = await p.evaluate(paced, [ms, sec]); } report[run.name].pace = res; console.log(`${run.name}\tpace\t${JSON.stringify(res)}`);
-        need(res.saving.at(-1) === 1.5, `${run.name}: a phone saving power stays at ${res.saving.at(-1)}`); need(res.fill.at(-1) < 1.5 && res.fill.length > 1, `${run.name}: too many pixels and the resolution did not answer: ${res.fill}`); need(res.hitch.length === 1, `${run.name}: a hitch moved the resolution: ${res.hitch}`); }
+        need(res.saving.at(-1) === 1.5, `${run.name}: a phone saving power stays at ${res.saving.at(-1)}`); need(res.fill.at(-1) < 1.5 && res.fill.length > 1, `${run.name}: too many pixels and the resolution did not answer: ${res.fill}`); need(res.hitch.length === 1, `${run.name}: a hitch moved the resolution: ${res.hitch}`); need(res.crawl.at(-1) === 1, `${run.name}: a phone crawling at 53 ms went back up: ${res.crawl}`); }
       if (errs.length) fails.push(`${run.name} ${pass}: ${errs[0]}`);
       await b.close(); continue;
     }
@@ -188,12 +189,12 @@ for (const run of RUNS) {
     report[run.name][pass] = { ...res, loadMs: load, gc, buffer: raw.size };
     if (errs.length) fails.push(`${run.name} ${pass}: ${errs[0]}`);
     await b.close();
-    console.log(`${run.name}\t${pass}\t${JSON.stringify(pass === 'time' ? { fps: res.all.fps, gapP95: res.all.gapP95, gapP99: res.all.gapP99, over33: res.all.over33, cpuMean: res.all.cpuMean, cpuP99: res.all.cpuP99, dpr: res.dpr, gc } : pass === 'count' ? { draws: res.draws, calls: res.calls, textureMB: res.textureMB, renderbufferMB: res.renderbufferMB, canvasMB: res.canvasMB, uploads: res.uploadsDuringRouteMB, links: res.linksDuringRoute, swept: res.swept, sweptShadows: res.sweptShadows } : res)}`);
+    console.log(`${run.name}\t${pass}\t${JSON.stringify(pass === 'time' ? { fps: res.all.fps, gapP95: res.all.gapP95, gapP99: res.all.gapP99, over33: res.all.over33, cpuMean: res.all.cpuMean, cpuP99: res.all.cpuP99, dpr: res.dpr, gc } : pass === 'count' ? { draws: res.draws, tris: res.tris, calls: res.calls, textureMB: res.textureMB, renderbufferMB: res.renderbufferMB, canvasMB: res.canvasMB, uploads: res.uploadsDuringRouteMB, links: res.linksDuringRoute, swept: res.swept, sweptShadows: res.sweptShadows } : res)}`);
     if (pass === 'count' && phone) { need(res.draws < 270, `${run.name}: ${res.draws} draws a frame`); need(res.swept > 300 && res.sweptShadows <= 2, `${run.name}: a shadow map drew in ${res.sweptShadows} of ${res.swept} frames of a camera move`); // a strike draws its own, once
       need(!Object.keys(res.uploadsDuringRouteMB).length, `${run.name}: uploads while navigating: ${JSON.stringify(res.uploadsDuringRouteMB)}`); need(!res.linksDuringRoute, `${run.name}: ${res.linksDuringRoute} shaders built while navigating`); need(res.canvasMB < 10, `${run.name}: ${res.canvasMB} MB of canvases kept after upload`); }
   }
 }
-const sums = await logic(); if (sums) { report.logic = sums; console.log('logic\t' + JSON.stringify(sums)); const s = sums; need(s.steady.length === 1, `steady 60 fps moved the resolution: ${s.steady}`); need(s.saving.at(-1) === 1.5 && s.saving.length === 4, `30 fps whatever is drawn: ${s.saving}`); need(s.fill.at(-1) === 1.25 && s.fill.length === 2, `too many pixels: ${s.fill}`); need(s.back.at(-1) === 1.5, `a load that eased never came back: ${s.back}`); need(s.tries.length < 20 && s.tries.at(-1) === 1.25, `no room to rise and it kept trying: ${s.tries}`); }
+const sums = await logic(); if (sums) { report.logic = sums; console.log('logic\t' + JSON.stringify(sums)); const s = sums; need(s.steady.length === 1, `steady 60 fps moved the resolution: ${s.steady}`); need(s.saving.at(-1) === 1.5 && s.saving.length === 4, `30 fps whatever is drawn: ${s.saving}`); need(s.fill.at(-1) === 1.25 && s.fill.length === 2, `too many pixels: ${s.fill}`); need(s.back.at(-1) === 1.5, `a load that eased never came back: ${s.back}`); need(s.waits.length >= 5 && s.waits.every((w, i) => !i || w > s.waits[i - 1] * 1.4 || w >= 300) && s.waits.at(-1) < 320, `no room to rise, and the waits between tries did not lengthen to their limit: ${s.waits}`); }
 if (out) fs.writeFileSync(out, JSON.stringify(report, null, 1));
 if (opt('against')) { const a = JSON.parse(fs.readFileSync(opt('against'))), row = (k, f) => console.log(k.padEnd(34), ...Object.keys(report).filter(n => report[n].time && a[n]?.time).map(n => `${n}: ${f(a[n])} -> ${f(report[n])}`)); for (const [k, f] of [['frames over 33 ms', v => v.time.all.over33], ['gap p99, ms', v => v.time.all.gapP99], ['frame CPU mean, ms', v => v.time.all.cpuMean], ['frame CPU p99, ms', v => v.time.all.cpuP99], ['JS garbage, MB/s', v => v.time.allocMBs], ['flat out, ms a frame', v => JSON.stringify(v.peak ?? '-')], ['draws a frame', v => v.count?.draws ?? '-'], ['GL calls a frame', v => v.count?.calls ?? '-']]) row(k, f); }
 console.log(fails.length ? 'FAIL:\n' + fails.join('\n') : 'PASS'); process.exit(fails.length ? 1 : 0);

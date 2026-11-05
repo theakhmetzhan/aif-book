@@ -547,7 +547,7 @@ function lights(scene, renderer, mobile, out) {
   ticks.push(t => {
     if (!strike && t > next && !out.freeze) { strike = { t0: t, k: 0.6 + Math.random() * 0.7 }; next = t + 50 + Math.random() * 70; out.events.lightning?.(1 + Math.random() * 5); }
     let f = 0; if (strike) { const u = t - strike.t0; f = (Math.exp(-((u - 0.05) ** 2) / 0.002) + 0.6 * Math.exp(-((u - 0.28) ** 2) / 0.004) + 0.35 * Math.exp(-((u - 0.5) ** 2) / 0.01)) * strike.k; if (u > 1.2) strike = null; }
-    if (f > 0 && (!mobile || !flash.intensity)) { if (!flash.intensity) renderer.shadowMap.needsUpdate = true; flash.shadow.needsUpdate = true; } // the first frame can't wait for main's shadow tick. On a phone it is the only one: nothing moves in a flash
+    if (f > 0 && (!mobile || !flash.intensity || out.busy)) { if (!flash.intensity) renderer.shadowMap.needsUpdate = true; flash.shadow.needsUpdate = true; } // the first frame can't wait for main's shadow tick. On a phone a strike draws once, and on while the pages move: a camera move changes no shadow
     win.intensity = baseWin * (1 + f * 7); win.color.setRGB(0.56 + f * 0.3, 0.65 + f * 0.25, 0.84 + f * 0.1); flash.intensity = f * 0.9;
   });
   out.lampObj?.userData.setGlow?.(1);

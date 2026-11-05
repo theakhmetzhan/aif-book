@@ -209,7 +209,7 @@ async function start() {
     if (newBox >= 0 && ++newBox > 3) { newBox = -1; resize(); }
     // a phone at rest draws every other frame: nothing still needs more than 30, and a phone that runs cooler keeps its speed for when the hand comes back
     if (mobile && !first && !freeze && !qs.get('shot') && !moves() && (rest = !rest)) { requestAnimationFrame(frame); return; }
-    clock.update(); const dt = Math.min(0.05, clock.getDelta()), el = tFix ?? (reduced ? 4 : clock.getElapsed());
+    clock.update(); const real = clock.getDelta(), dt = Math.min(0.05, real), el = tFix ?? (reduced ? 4 : clock.getElapsed());
     // page spring: critically damped, capped speed for long jumps
     if (!freeze) {
       const w = reduced ? 9 : 6.2; pv += (w * w * (target - p) - 2 * w * pv) * dt; pv = Math.max(-5, Math.min(5, pv)); p += pv * dt;
@@ -220,19 +220,19 @@ async function start() {
     book.group.position.x = -book.centerX(p);
     rig.update(first ? 1 : dt);
     const moving = moves(); if (mobile) room.rainStep = moving ? 1 / 15 : 1 / 30; // no one reads the rain while the view is sweeping
-    room.tick(el, dt, cam);
+    const busy = Math.abs(target - p) > 1e-4 || Math.abs(pv) > 1e-4 || Math.abs(hoverK) > 1e-3 && Math.abs(hoverK - (Math.abs(target - p) < 0.02 ? hover : 0)) > 1e-3;
+    room.busy = busy; room.tick(el, dt, cam);
     audio.update(dt);
     const ri = Math.round(target);
     if (ri !== shown) { shown = ri; readSpread(ri); }
     film.uniforms.uT.value = el;
     // shadows: every frame while anything that casts them moves, otherwise a few times a second for the drifting paper
-    const busy = Math.abs(target - p) > 1e-4 || Math.abs(pv) > 1e-4 || Math.abs(hoverK) > 1e-3 && Math.abs(hoverK - (Math.abs(target - p) < 0.02 ? hover : 0)) > 1e-3;
     // both maps take more draws than the picture does, and a camera move changes neither. The lamp's holds the book, so it follows the pages; the window's holds the paper on the board, the only thing it lights that moves. One at a time when at rest, so no frame pays for both
     if (mobile) { if (first || busy) lamp.shadow.needsUpdate = true; if (first) win.shadow.needsUpdate = true; else if (!moving) { shadowTick++; if (shadowTick % 6 === 0) win.shadow.needsUpdate = true; else if (shadowTick % 30 === 3) lamp.shadow.needsUpdate = true; } if (lamp.shadow.needsUpdate || win.shadow.needsUpdate) renderer.shadowMap.needsUpdate = true; }
     else if (busy || first || ++shadowTick % 4 === 0) renderer.shadowMap.needsUpdate = true;
     composer.render(dt);
     // keep it smooth: lower the resolution while frames run long, raise it again when there is room
-    if (res) { const to = res.frame(dt, moving); if (to) { dpr = to; resize(); } }
+    if (res) { const to = res.frame(real, moving); if (to) { dpr = to; resize(); } } // the true length: past the cap, a very slow phone's gains would not show
     else if (!mobile && !freeze && !qs.get('dpr')) { ft.push(clock.getDelta() * 0 + dt); if (ft.length > 45) { const a = ft.reduce((x, y) => x + y, 0) / ft.length; ft.length = 0;
       if (a > 0.024 && dpr > 1) { dpr = Math.max(1, dpr - 0.25); resize(); } else if (a < 0.0125 && dpr < dprMax && ++calm > 4) { dpr = Math.min(dprMax, dpr + 0.25); resize(); calm = 0; } } }
     first = false;
