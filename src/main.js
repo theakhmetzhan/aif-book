@@ -238,7 +238,7 @@ async function start() {
     first = false;
     requestAnimationFrame(frame);
   }
-  // what only shows later goes to the GPU now, behind the black, so no spread stops mid-turn for its first upload. Once it has, a canvas or bitmap is only a second copy, which a phone cannot spare
+  // what only shows later goes to the GPU now, behind the poster, so no spread stops mid-turn for its first upload. Once it has, a canvas or bitmap is only a second copy, which a phone cannot spare
   const maps = new Map(); scene.traverse(o => { for (const m of [o.material].flat()) if (m) for (const v of Object.values(m)) if (v?.isTexture) maps.set(v.source, [...(maps.get(v.source) ?? []), v]); });
   maps.forEach((ts, s) => { ts.forEach(t => renderer.initTexture(t)); if (s.data?.getContext) s.data.width = s.data.height = 0; else s.data?.close?.(); });
   // and one rehearsal with every pop-up out, so the first sight of anything builds no shader and no buffer: the first frame puts them away again

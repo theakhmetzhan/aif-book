@@ -8,12 +8,23 @@
 
 <link rel="icon" href="./favicon.svg" type="image/svg+xml">
 <link href="./fonts/fonts.css" rel="stylesheet">
+<!-- the room's surfaces, asked for before the script arrives to ask. Each must match its loader to be reused: the URL in src/assets.js, and crossorigin because TextureLoader loads anonymously. Not the models: Safari never reuses as="fetch", so it would fetch them twice, Chrome 156 fails blob() on a fetch that takes over a preload still arriving, and these already fill the line until the script asks for the rest -->
+<link rel="preload" href="/assets/textures/wood_table_001/diff_2k.webp" as="image" crossorigin>
+<link rel="preload" href="/assets/textures/wood_table_001/nor_gl_x3_2k.webp" as="image" crossorigin>
+<link rel="preload" href="/assets/textures/wood_table_001/rough_1k.webp" as="image" crossorigin>
+<link rel="preload" href="/assets/textures/leather_red_03/diff_green_1k.webp" as="image" crossorigin>
+<link rel="preload" href="/assets/textures/leather_red_03/diff_oxblood_1k.webp" as="image" crossorigin>
+<link rel="preload" href="/assets/textures/leather_red_03/nor_gl_x5_1k.webp" as="image" crossorigin>
+<link rel="preload" href="/assets/textures/leather_red_03/rough_1k.webp" as="image" crossorigin>
+<link rel="preload" href="/assets/textures/decrepit_wallpaper/diff_1k.webp" as="image" crossorigin>
+<link rel="preload" href="/assets/textures/decrepit_wallpaper/nor_gl_1k.webp" as="image" crossorigin>
+<link rel="preload" href="/assets/textures/decrepit_wallpaper/rough_1k.webp" as="image" crossorigin>
 </head>
 <body>
 <canvas id="gl" tabindex="0" role="img" aria-label="A detective’s desk at night with a pop-up casebook open on it. Use the page buttons or the arrow keys to turn the pages; the text of the open pages follows below for screen readers."></canvas>
 <main id="read" class="sr-only" aria-live="polite"></main>
 <div id="hud"></div>
-<div id="loader"></div>
+<div id="loader"><picture><source media="(max-aspect-ratio:17/20)" srcset="/src/poster-tall.webp"><img src="/src/poster-wide.webp" alt="" decoding="sync"></picture></div>
 <script type="module" src="/src/main.js"></script>
 </body>
 </html>
