@@ -6,12 +6,11 @@ import { FACES, BOOK_URL, TITLE_TXT, SUB_TXT, AUTHOR } from './pages.js';
 import { grainTile, rng } from './paper.js';
 
 // ---------- text (edit here) ----------
-export const TEAM = 'Group 1'; // team number: unconfirmed, change here only
 export const CARD_TEXT = {
   title: TITLE_TXT, // EVIDENCE
   subtitle: SUB_TXT, // A Casebook of Artificial Intelligence
   author: AUTHOR,
-  team: `${TEAM} · individual project`,
+  team: 'Individual project',
   course: 'AI Fundamentals (AIF1303) · QAIRU · 2026',
   annotation: 'Artificial intelligence is detective work. In ten cases, from agents and search to probability, learning and language models, paper exhibits stand up from the pages of a casebook on a detective’s desk at night; lean over the book to read the full explanation. Every number in the exhibits was computed by running the algorithm it describes.',
   cta: 'Scan to open the casebook',
@@ -219,11 +218,10 @@ export function drawCard(ctx, W, H, { qr, cover } = {}) {
   let y = qrY + 17;
   for (const l of lines) { text(g, l, X, y, { font: bodyFont, color: C.ink }); y += lead; }
   const lastBody = y - lead;
-  // filed by: name, team; baselines match the CTA and URL lines on the tag
-  text(g, 'FILED BY', X, ctaBase - 46, { font: `400 22px ${F.display}`, color: C.red, track: 3.3 });
-  text(g, CARD_TEXT.author, X, ctaBase, { font: `700 28px ${F.body}`, color: C.ink });
-  text(g, CARD_TEXT.team, X, urlBase, { font: `400 24px ${F.body}`, color: C.ink2 });
-  if (lastBody + 18 > ctaBase - 46 - 22) console.warn('card: annotation runs into the filed-by block', { lines: lines.length });
+  // filed by: baselines match the CTA and URL lines on the tag
+  text(g, 'FILED BY', X, ctaBase, { font: `400 22px ${F.display}`, color: C.red, track: 3.3 });
+  text(g, teamLine(), X, urlBase, { font: `700 24px ${F.body}`, color: C.ink });
+  if (lastBody + 18 > ctaBase - 22) console.warn('card: annotation runs into the filed-by block', { lines: lines.length });
   g.restore();
   return { s, qrModules: n, qrPx: Math.round(G.qr * s), quietPx: Math.round(G.pad * s), lines: lines.length };
 }

@@ -1,0 +1,68 @@
+{
+ "notes": "reed opened the door . moss opened the safe . kerr locked the safe . reed locked the door .\nmoss saw the safe . kerr saw the safe . reed saw the door . moss hid the ledger .\nkerr opened the ledger . reed found the key . moss locked the door . kerr found the safe .\nthe safe was empty . the safe was open . the door was open . the ledger was missing .\nreed saw the safe . moss found the ledger . kerr hid the key . reed saw the door .",
+ "claimP": 0.05,
+ "n": 100,
+ "vocab": 18,
+ "after": [
+  [
+   "safe",
+   8
+  ],
+  [
+   "door",
+   6
+  ],
+  [
+   "ledger",
+   4
+  ],
+  [
+   "key",
+   2
+  ]
+ ],
+ "P": {
+  "safe": 0.4,
+  "door": 0.3,
+  "ledger": 0.2,
+  "key": 0.1
+ },
+ "T": {
+  "0.5": {
+   "safe": 0.5333333333333333,
+   "door": 0.2999999999999999,
+   "ledger": 0.13333333333333333,
+   "key": 0.03333333333333335
+  },
+  "1": {
+   "safe": 0.4,
+   "door": 0.3,
+   "ledger": 0.2,
+   "key": 0.10000000000000002
+  },
+  "2": {
+   "safe": 0.32540090689572504,
+   "door": 0.2818054517861928,
+   "ledger": 0.2300931878702196,
+   "key": 0.16270045344786255
+  }
+ },
+ "sampled": 1000,
+ "new": 743,
+ "claim": "reed opened the safe .",
+ "attention": {
+  "the": 0.10581694043567373,
+  "safe": 0.32999933999710923,
+  "was": 0.11210608954804212,
+  "empty": 0.1594338838978721,
+  "because": 0.11472519521070249,
+  "it": 0.1779185509106003
+ },
+ "miss": [
+  0.2,
+  0.1,
+  0.1,
+  0.05
+ ],
+ "through": 0.00010000000000000003
+}

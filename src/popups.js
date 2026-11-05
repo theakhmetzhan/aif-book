@@ -3,12 +3,12 @@
 // All the pieces on one page share one fold angle φ (0 = flat on the page, π/2 = standing), so their planes stay parallel and
 // can never pass through each other. The book drives φ from the angle between the two pages of the spread (see book.js).
 import * as THREE from 'three';
-import { C, FIG11, G, A_ORDER, A_FRONTIER, HILL, fHill, CASES } from './pages.js';
+import { C, FIG11, FIG, G, A_ORDER, A_FRONTIER, HILL, fHill, CASES, AD, MD, BY, HM, DE, NE, LA, pc, sigX, logit } from './pages.js';
 import { grainTile, rng } from './paper.js';
 import { SERIF, DISPLAY, TITLE, HAND } from './typeset.js';
 import { T } from './theme.js';
 
-const B = T.bold;
+const B = T.bold, ARROWS = { N: '↑', E: '→', S: '↓', W: '←' };
 export const CARD = 0.024; // card thickness, cm
 let grainTex;
 const grain = () => { if (!grainTex) { grainTex = new THREE.CanvasTexture(grainTile(256, 21)); grainTex.wrapS = grainTex.wrapT = THREE.RepeatWrapping; } return grainTex; };
@@ -301,6 +301,182 @@ export const BUILDERS = {
       pieces.push(piece(sd, { x: x0, v0: v, dir: -1, H: top, x0, x1, color: col }));
     });
     return { pieces };
+  },
+  // Case IV: the game tree in three tiers. A pruned leaf is grey and has no twine: nobody read it
+  gameTree() {
+    const pieces = [], strings = [], t = FIG.tree;
+    const node = (x, v0, w, h, color, draw) => { const pc = piece(standee(w, h, { color, ppu: 170, draw }), { x: x - w / 2, v0, dir: -1, H: h, x0: x - w / 2, x1: x + w / 2, color }); pieces.push(pc); return pc; };
+    const head = (g, p, W, big, small, col = C.ink, top = 0.72) => { g.textAlign = 'center'; g.fillStyle = col; g.font = `${B} ${0.26 * p}px ${SERIF}`; g.fillText(small, W / 2, 0.4 * p); g.font = `700 ${0.72 * p}px ${TITLE}`; g.fillText(big, W / 2, (top + 0.42) * p); };
+    const root = node(t.root.x, t.root.v, t.root.w, t.root.h, '#2c3956', (g, p, W) => {
+      g.textAlign = 'center'; g.fillStyle = '#efe3c8'; g.font = `400 ${0.3 * p}px ${DISPLAY}`; g.fillText('MAX', W / 2, 0.5 * p); g.font = `700 ${0.95 * p}px ${TITLE}`; g.fillText(String(AD.root), W / 2, 1.45 * p);
+      g.font = `${B} ${0.25 * p}px ${SERIF}`; g.fillText('the detective', W / 2, 1.95 * p); g.fillText('watches the', W / 2, 2.28 * p); g.fillText(AD.moves[AD.best], W / 2, 2.61 * p);
+    });
+    const anchors = (pc, h) => { const o = new THREE.Object3D(); o.position.set(pc.x0 === undefined ? 0 : (pc.x1 - pc.x0) / 2, h - 0.12, 0.05); pc.fold.add(o); return o; };
+    const rootTip = anchors(root, t.root.h * 0.42);
+    t.mins.x.forEach((x, i) => {
+      const best = i === AD.best, col = best ? '#e6c27a' : '#e7d6b3';
+      const mn = node(x, t.mins.v, t.mins.w, t.mins.h, col, (g, p, W) => { g.textAlign = 'center'; g.fillStyle = T.accent; g.font = `400 ${0.26 * p}px ${DISPLAY}`; g.fillText('MIN', W / 2, 0.42 * p); g.fillStyle = C.ink; g.font = `700 ${0.72 * p}px ${TITLE}`; g.fillText(String(AD.mins[i]), W / 2, 1.14 * p); g.font = `${B} ${0.27 * p}px ${SERIF}`; g.fillText(AD.moves[i], W / 2, 1.58 * p); });
+      const top = anchors(mn, t.mins.h), low = anchors(mn, t.mins.h * 0.34);
+      strings.push(new SlackString([rootTip, top], { r: best ? 0.035 : 0.02, color: best ? T.string : T.twine, extra: best ? 1.015 : 1.03 }));
+      t.leaf.x[i].forEach((lx, j) => {
+        const cut = AD.pruned.some(([a, b]) => a === i && b === j), u = AD.leaves[i][j], won = best && u === AD.root;
+        const lf = node(lx, t.leaf.v, t.leaf.w, t.leaf.h, cut ? '#a79d8a' : won ? '#e6c27a' : '#f3ead6', (g, p, W, H) => {
+          g.textAlign = 'center'; g.fillStyle = cut ? 'rgba(36,28,20,.45)' : C.ink; g.font = `700 ${0.62 * p}px ${TITLE}`; g.fillText(String(u), W / 2, 0.85 * p);
+          if (cut) { g.strokeStyle = T.accent; g.lineWidth = 0.07 * p; g.beginPath(); g.moveTo(0.14 * p, 0.3 * p); g.lineTo(W - 0.14 * p, 1.05 * p); g.moveTo(W - 0.14 * p, 0.3 * p); g.lineTo(0.14 * p, 1.05 * p); g.stroke(); g.fillStyle = T.accent; g.font = `${B} ${0.2 * p}px ${SERIF}`; g.fillText('pruned', W / 2, 1.42 * p); }
+        });
+        if (!cut) strings.push(new SlackString([low, anchors(lf, t.leaf.h)], { r: won ? 0.035 : 0.02, color: won ? T.string : T.twine, extra: won ? 1.015 : 1.03 }));
+      });
+    });
+    return { pieces, strings };
+  },
+  // Case V: each row of the city is a ridge of steps, every step as tall as that block's value
+  valueTerrain() {
+    const pieces = [], f = FIG.grid, W = f.cell * 5, cols = ['#7a5c3e', '#a98a60', '#d9c49a'];
+    MD.map.forEach((row, r) => {
+      const hs = [...row].map((c, k) => c === 'G' ? f.goal : c === 'X' ? f.trap : c === '#' ? f.wall : f.h(MD.V[`${r},${k}`]));
+      const pts = [[0, 0]]; hs.forEach((h, k) => pts.push([k * f.cell, h], [(k + 1) * f.cell, h])); pts.push([W, 0]);
+      const top = Math.max(...hs) + 0.01;
+      const sd = standee(W, top, { pts, color: cols[r], ppu: 110, draw: (g, p) => {
+        [...row].forEach((c, k) => {
+          const x = (k + 0.5) * f.cell, y = (top - hs[k] + 0.42) * p; g.textAlign = 'center';
+          if (c === 'G') { g.fillStyle = T.accent2; g.fillRect(k * f.cell * p, 0, f.cell * p, 0.72 * p); g.fillStyle = '#efe3c8'; g.font = `${B} ${0.3 * p}px ${SERIF}`; g.fillText('WARRANT', x * p, 0.48 * p); g.font = `${B} ${0.38 * p}px ${SERIF}`; g.fillText('+10', x * p, 1.25 * p); return; }
+          if (c === 'X') { g.fillStyle = T.accent; g.fillRect(k * f.cell * p, (top - hs[k]) * p, f.cell * p, hs[k] * p); return; }
+          if (c === '#') return;
+          g.fillStyle = C.ink; g.font = `${B} ${0.34 * p}px ${SERIF}`; g.fillText(`${ARROWS[MD.pi[`${r},${k}`]]} ${MD.V[`${r},${k}`].toFixed(1).replace('-', '−')}`, x * p, y);
+        });
+      } });
+      pieces.push(piece(sd, { x: f.x0, v0: f.rows[r], dir: -1, H: top, x0: f.x0, x1: f.x0 + W, color: cols[r] }));
+    });
+    return { pieces };
+  },
+  // Case V, learning: the best road's six blocks as valued after 10, 100 and 1,000 attempts, and the truth
+  staircase() {
+    const pieces = [], f = FIG.stair, W = f.cell * f.route.length, cols = ['#a79d8a', '#c7b48f', '#e0cfa8', '#e6c27a'];
+    const sets = [MD.q.snap['10'].V, MD.q.snap['100'].V, MD.q.snap['1000'].V, MD.V];
+    sets.forEach((V, i) => {
+      const hs = f.route.map(k => f.h(V[k])), pts = [[0, 0]]; hs.forEach((h, k) => pts.push([k * f.cell, h], [(k + 1) * f.cell, h])); pts.push([W, 0]);
+      const top = Math.max(...hs) + 0.01;
+      const sd = standee(W, top, { pts, color: cols[i], ppu: 130, draw: (g, p) => { hs.forEach((h, k) => { g.textAlign = 'center'; g.fillStyle = i === 3 ? T.accent : C.ink; g.font = `${B} ${0.3 * p}px ${SERIF}`; g.fillText(V[f.route[k]].toFixed(1).replace('-', '−'), (k + 0.5) * f.cell * p, (top - h + 0.38) * p); }); } });
+      pieces.push(piece(sd, { x: f.x0, v0: f.rows[i], dir: -1, H: top, x0: f.x0, x1: f.x0 + W, color: cols[i] }));
+    });
+    return { pieces };
+  },
+  // Case VI: the network as four cards and three strings, and belief in a break-in as a ridge of bars
+  beliefNet() {
+    const pieces = [], strings = [], n = FIG.net, tips = {}, card = {};
+    const names = { B: ['Break-in', pc(BY.P_B, 0)], S: ['Storm', pc(BY.P_S, 0)], W: ['Window', 'broken'], M: ['Muddy', 'print'] };
+    for (const [k, [x, v0, h]] of Object.entries(n.nodes)) {
+      const col = k === 'B' ? T.accent2 : k === 'W' ? '#e6c27a' : '#e7d6b3', ink = k === 'B' ? '#efe3c8' : C.ink;
+      const sd = standee(n.w, h, { color: col, ppu: 170, draw: (g, p, W) => { g.textAlign = 'center'; g.fillStyle = ink; g.font = `700 ${0.42 * p}px ${TITLE}`; g.fillText(names[k][0], W / 2, 0.68 * p); g.font = `${B} ${0.3 * p}px ${SERIF}`; g.fillText(names[k][1], W / 2, 1.14 * p); } });
+      const pc2 = piece(sd, { x: x - n.w / 2, v0, dir: -1, H: h, x0: x - n.w / 2, x1: x + n.w / 2, color: col }); pieces.push(pc2); card[k] = { pc: pc2, h };
+    }
+    const at = (k, y) => { const o = new THREE.Object3D(); o.position.set(n.w / 2, y, 0.05); card[k].pc.fold.add(o); return o; };
+    for (const [a, b] of [['B', 'W'], ['S', 'W'], ['B', 'M']]) strings.push(new SlackString([at(a, card[a].h * 0.32), at(b, card[b].h - 0.1)], { r: 0.03, color: a === 'B' ? T.string : T.twine, extra: 1.02 }));
+    const b = n.bars, vals = [BY.rows.B, BY.rows['B|W'], BY.rows['B|W,S'], BY.rows['B|W,M'], BY.rows['B|W,S,M']], W = b.w * vals.length;
+    const hs = vals.map(v => b.base + v * b.k), pts = [[0, 0]]; hs.forEach((h, k) => pts.push([k * b.w + 0.06, b.base * 0.72], [k * b.w + 0.06, h], [(k + 1) * b.w - 0.06, h], [(k + 1) * b.w - 0.06, b.base * 0.72])); pts.push([W, b.base * 0.72], [W, 0]);
+    const top = Math.max(...hs) + 0.01;
+    const bars = standee(W, top, { pts, color: '#e7d6b3', ppu: 170, draw: (g, p) => { hs.forEach((h, k) => { g.fillStyle = k === 2 ? T.accent2 : T.accent; g.fillRect(k * b.w * p, (top - h) * p, b.w * p, (h - b.base * 0.72) * p); g.textAlign = 'center'; g.fillStyle = C.ink; g.font = `${B} ${0.22 * p}px ${SERIF}`; g.fillText(pc(vals[k], 0), (k + 0.5) * b.w * p, (top - 0.17) * p); }); } });
+    pieces.push(piece(bars, { x: b.x0, v0: b.v, dir: -1, H: top, x0: b.x0, x1: b.x0 + W, color: '#e7d6b3' }));
+    return { pieces, strings };
+  },
+  // Case VII: four nights: a window in front, two beliefs behind it, and the Viterbi path as a red string
+  trellis() {
+    const pieces = [], strings = [], f = FIG.trellis, path = [];
+    HM.obs.forEach((o, i) => {
+      const lit = o === 'Lit', ww = f.obs.w, hh = f.obs.h;
+      const win = standee(ww, hh, { color: '#3a2a1a', ppu: 170, draw: (g, p, W, H) => { const m = 0.2 * p, pw = (W - 3 * m) / 2, ph = (H - 3 * m) / 2; for (const a of [0, 1]) for (const b of [0, 1]) { g.fillStyle = lit ? '#f4c36a' : '#1b2233'; g.fillRect(m + a * (pw + m), m + b * (ph + m), pw, ph); } } });
+      pieces.push(piece(win, { x: f.x[i] - ww / 2, v0: f.obs.v, dir: -1, H: hh, x0: f.x[i] - ww / 2, x1: f.x[i] + ww / 2, color: '#3a2a1a' }));
+      HM.states.forEach((s, k) => {
+        const pr = HM.filter[i][k], h = f.base + pr * f.k, x = f.x[i] + (k ? 0.08 : -f.w - 0.08), col = k ? '#a9b2c4' : T.accent;
+        const bar = standee(f.w, h, { color: col, ppu: 170, draw: (g, p, W, H) => { g.textAlign = 'center'; g.fillStyle = k ? C.ink : '#f6eedc'; g.font = `${B} ${0.27 * p}px ${SERIF}`; g.fillText(s[0] === 'A' ? 'Active' : 'Quiet', W / 2, H - 0.14 * p); g.font = `${B} ${0.27 * p}px ${SERIF}`; if (H > 0.8 * p) g.fillText(pc(pr, 0), W / 2, H - 0.46 * p); else { g.font = `${B} ${0.2 * p}px ${SERIF}`; g.fillText(pc(pr, 0), W / 2, H - 0.42 * p); } } });
+        const pc2 = piece(bar, { x, v0: f.v, dir: -1, H: h, x0: x, x1: x + f.w, color: col }); pieces.push(pc2);
+        if (HM.path[i] === k) { const o2 = new THREE.Object3D(); o2.position.set(f.w / 2, h - 0.08, 0.07); pc2.fold.add(o2); path.push(o2); }
+      });
+    });
+    strings.push(new SlackString(path, { r: 0.05, color: T.string, extra: 1.02 }));
+    return { pieces, strings };
+  },
+  // Case VIII: the expected loss rises out of a flat card at the threshold
+  utilityRamp() {
+    const pieces = [], f = FIG.ramp, W = f.x1 - f.x0, H = p => 0.12 + p * DE.loss / (f.pMax * DE.loss) * f.k, flatH = 0.12 + DE.guard / (f.pMax * DE.loss) * f.k, tau = DE.tau / f.pMax * W;
+    const ramp = standee(W, H(f.pMax), { pts: [[0, 0], [0, H(0)], [W, H(f.pMax)], [W, 0]], color: T.accent, ppu: 120, draw: (g, p, cw, ch) => { g.fillStyle = '#f6eedc'; g.font = `${B} ${0.34 * p}px ${SERIF}`; g.textAlign = 'right'; g.fillText('expected loss, no guard', (W - 0.3) * p, (H(f.pMax) - 0.32) * p); } });
+    pieces.push(piece(ramp, { x: f.x0, v0: f.v, dir: -1, H: H(f.pMax), x0: f.x0, x1: f.x1, color: T.accent }));
+    const flat = standee(W, flatH, { color: '#d9c49a', ppu: 120, draw: (g, p) => { g.fillStyle = C.ink; g.font = `${B} ${0.3 * p}px ${SERIF}`; g.textAlign = 'left'; g.fillText(`guard: $${DE.guard.toLocaleString('en-US')}`, 0.25 * p, (flatH - 0.3) * p); g.textAlign = 'right'; g.fillText('guard pays here →', (W - 0.3) * p, (flatH - 0.3) * p); } });
+    pieces.push(piece(flat, { x: f.x0, v0: f.flat, dir: -1, H: flatH, x0: f.x0, x1: f.x1, color: '#d9c49a' }));
+    const pw = 0.14, fw = 2.1, fh = 0.72, h = f.flag.h, x = f.x0 + tau;
+    const flag = standee(pw + fw, h, { pts: [[0, 0], [pw, 0], [pw, h - fh], [pw + fw, h - fh], [pw + fw, h], [0, h]], color: T.ochre, ppu: 200, draw: (g, p) => { g.fillStyle = C.ink; g.textAlign = 'center'; g.font = `${B} ${0.3 * p}px ${SERIF}`; g.fillText(`p = ${pc(DE.tau, 1)}`, (pw + fw / 2) * p, 0.46 * p); } });
+    flag.position.x = -pw / 2; pieces.push(piece(flag, { x, v0: f.flag.v, dir: -1, H: h, x0: x - pw / 2, x1: x + pw / 2 + fw, tx0: x - 0.2, tx1: x + 0.2, color: T.ochre }));
+    return { pieces };
+  },
+  // Case VIII: twelve sealed tips laid out by score under the fitted sigmoid, with two thresholds
+  threshold() {
+    const pieces = [], f = FIG.sig, W = f.x1 - f.x0, n = 140, sg = z => 1 / (1 + Math.exp(-z)), H = z => 0.15 + sg(z) * f.k;
+    const pts = [[0, 0]]; for (let k = 0; k <= n; k++) { const z = f.z0 + (f.z1 - f.z0) * k / n; pts.push([sigX(z) - f.x0, H(z)]); } pts.push([W, 0]);
+    const top = H(f.z1) + 0.01;
+    const curve = standee(W, top, { pts, color: '#d9c49a', ppu: 110, draw: (g, p) => { g.strokeStyle = 'rgba(36,28,20,.18)'; g.lineWidth = 0.02 * p; for (const v of [0.25, 0.5, 0.75]) { const y = (top - 0.15 - v * f.k) * p; g.beginPath(); g.moveTo(0, y); g.lineTo(W * p, y); g.stroke(); } } });
+    pieces.push(piece(curve, { x: f.x0, v0: f.curve, dir: -1, H: top, x0: f.x0, x1: f.x1, color: '#d9c49a' }));
+    [[0.5, 3.9, T.accent2], [DE.tau, 3.9, T.ochre]].forEach(([tau, h, col]) => {
+      const pw = 0.14, fw = 1.55, fh = 0.62, x = sigX(logit(tau)), hh = H(logit(tau)) + 1.0;
+      const flag = standee(pw + fw, hh, { pts: [[0, 0], [pw, 0], [pw, hh - fh], [pw + fw, hh - fh], [pw + fw, hh], [0, hh]], color: col, ppu: 200, draw: (g, p) => { g.fillStyle = col === T.ochre ? C.ink : '#f6eedc'; g.textAlign = 'center'; g.font = `${B} ${0.28 * p}px ${SERIF}`; g.fillText(`τ ${tau}`, (pw + fw / 2) * p, 0.41 * p); } });
+      flag.position.x = -pw / 2; pieces.push(piece(flag, { x, v0: f.flags, dir: -1, H: hh, x0: x - pw / 2, x1: x + pw / 2 + fw, tx0: x - 0.2, tx1: x + 0.2, color: col }));
+    });
+    DE.test.slice().sort((a, b) => a.p - b.p).forEach((t, i) => {
+      const x = sigX(logit(t.p)), v0 = f.rows[i % 3], w = f.tok.w, h = f.tok.h, col = t.y ? T.accent : '#e7d6b3';
+      const tok = standee(w, h, { color: col, ppu: 200, draw: (g, p, W2) => { g.textAlign = 'center'; g.fillStyle = t.y ? '#f6eedc' : C.ink; g.font = `${B} ${0.24 * p}px ${SERIF}`; g.fillText(t.p.toFixed(2).slice(1), W2 / 2, 0.4 * p); } });
+      pieces.push(piece(tok, { x: x - w / 2, v0, dir: -1, H: h, x0: x - w / 2, x1: x + w / 2, color: col }));
+    });
+    return { pieces };
+  },
+  // Case IX: the trained network, its weights as strings: red adds, blue subtracts, thicker counts for more
+  network() {
+    const pieces = [], strings = [], tags = [], f = FIG.nn, net = NE.net;
+    const fmt = v => (v < 0 ? '−' : '+') + Math.abs(v).toFixed(1);
+    const card = (x, tier, name, sub, col, ink) => { const w = f.w, h = tier.h, sd = standee(w, h, { color: col, ppu: 170, draw: (g, p, W) => { g.textAlign = 'center'; g.fillStyle = ink; g.font = `700 ${0.4 * p}px ${TITLE}`; g.fillText(name, W / 2, 0.62 * p); if (sub) { g.font = `${B} ${0.25 * p}px ${SERIF}`; g.fillText(sub, W / 2, 1.0 * p); } } }); const pc2 = piece(sd, { x: x - w / 2, v0: tier.v, dir: -1, H: h, x0: x - w / 2, x1: x + w / 2, color: col }); pieces.push(pc2); return pc2; };
+    const at = (c, y) => { const o = new THREE.Object3D(); o.position.set(f.w / 2, y, 0.05); c.fold.add(o); return o; };
+    const inp = f.input.x.map((x, i) => card(x, f.input, `Witness ${i + 1}`, 'yes or no', '#f3ead6', C.ink));
+    const hid = f.hidden.x.map((x, i) => card(x, f.hidden, `Hidden ${'AB'[i]}`, `bias ${fmt(net.b1[i])}`, '#e6c27a', C.ink));
+    const out = card(f.output.x[0], f.output, 'Output', `bias ${fmt(net.b2)}`, T.accent2, '#efe3c8');
+    const wire = (a, ya, b, yb, w) => { const s = new SlackString([at(a, ya), at(b, yb)], { r: 0.014 + Math.abs(w) * 0.0022, color: w > 0 ? T.string : T.accent2, extra: 1.02 }); strings.push(s); const tg = standee(0.78, 0.42, { color: '#d7b87f', ppu: 240, draw: (g, p, W, H) => { g.fillStyle = w > 0 ? T.accent : T.accent2; g.font = `${B} ${0.27 * p}px ${SERIF}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(fmt(w), W / 2, H / 2 + 0.02 * p); } }); tg.position.set(-0.39, -0.47, 0); const holder = new THREE.Group(); holder.add(tg); tags.push({ holder, s, h: 0.47 }); };
+    hid.forEach((h, j) => inp.forEach((c, i) => wire(h, f.hidden.h * 0.3, c, f.input.h - 0.1, net.W1[j][i])));
+    hid.forEach((h, j) => wire(out, f.output.h * 0.3, h, f.hidden.h - 0.1, net.W2[j]));
+    return { pieces, strings, tags };
+  },
+  // Case X: three ridges of next-word bars, one per temperature, and a row of words as tall as their attention
+  nextWord() {
+    const pieces = [], f = FIG.word, ws = LA.after.map(a => a[0]), L = 1.0, W = L + f.w * ws.length, cols = ['#7a5c3e', '#a98a60', '#d9c49a'];
+    f.rows.forEach((r, i) => {
+      const hs = ws.map(w => r.base + LA.T[r.t][w] * f.k), lab = r.base + 0.55, pts = [[0, 0], [0, lab], [L - 0.1, lab], [L - 0.1, r.base]]; hs.forEach((h, k) => pts.push([L + k * f.w + 0.12, r.base], [L + k * f.w + 0.12, h], [L + (k + 1) * f.w - 0.12, h], [L + (k + 1) * f.w - 0.12, r.base])); pts.push([W, r.base], [W, 0]);
+      const top = Math.max(...hs, lab) + 0.01, ink = i ? C.ink : '#f6eedc';
+      const sd = standee(W, top, { pts, color: cols[i], ppu: 120, draw: (g, p) => {
+        g.fillStyle = ink; g.textAlign = 'center'; g.font = `${B} ${0.25 * p}px ${SERIF}`; g.fillText(`T ${r.t}`, (L - 0.1) / 2 * p, (top - lab + 0.36) * p);
+        hs.forEach((h, k) => { const x = (L + (k + 0.5) * f.w) * p; g.font = `${B} ${0.26 * p}px ${SERIF}`; g.fillText(ws[k], x, (top - h + 0.33) * p); g.font = `400 ${0.24 * p}px ${SERIF}`; g.fillText(pc(LA.T[r.t][ws[k]], 0), x, (top - h + 0.62) * p); });
+      } });
+      pieces.push(piece(sd, { x: f.x0 - L, v0: r.v, dir: -1, H: top, x0: f.x0 - L, x1: f.x0 - L + W, color: cols[i] }));
+    });
+    const t = f.tiles; Object.entries(LA.attention).forEach(([w, a], i) => {
+      const x = t.x0 + i * (t.w + 0.08), h = t.base + a * t.k, last = w === 'it', col = last ? T.accent2 : w === 'safe' ? '#e6c27a' : '#f3ead6';
+      const sd = standee(t.w, h, { color: col, ppu: 170, draw: (g, p, W2, H2) => { g.textAlign = 'center'; g.fillStyle = last ? '#efe3c8' : C.ink; g.font = `${B} ${0.27 * p}px ${SERIF}`; g.fillText(w, W2 / 2, H2 - 0.14 * p); g.font = `400 ${0.22 * p}px ${SERIF}`; g.fillText(pc(a, 0), W2 / 2, H2 - 0.44 * p); } });
+      pieces.push(piece(sd, { x, v0: t.v, dir: -1, H: h, x0: x, x1: x + t.w, color: col }));
+    });
+    return { pieces };
+  },
+  // Case X: four cards with holes. Twine meets a solid card and stops; the red string has found holes that line up
+  safeguards() {
+    const pieces = [], strings = [], f = FIG.layers, circle = ([cx, cy], r) => Array.from({ length: 40 }, (_, k) => { const a = -k / 40 * Math.PI * 2; return [cx + Math.cos(a) * r, cy + Math.sin(a) * r]; });
+    const others = [[[1.3, 2.3], [8.1, 1.1], [2.5, 0.9]], [[7.9, 2.5], [1.2, 1.3], [8.3, 0.8]], [[2.1, 2.9], [8.2, 3.0], [1.1, 0.9]], [[1.2, 3.4], [8.2, 1.6], [2.3, 0.9], [7.0, 3.4]]];
+    const placed = f.cards.map((c, i) => {
+      const hs = [f.hole, ...(i === 0 ? [f.stop] : []), ...others[i]], cols = ['#f3ead6', '#e6d6b0', '#d7bf90', '#c9a877'];
+      const sd = standee(f.w, c.h, { color: cols[i], back: '#b8a27a', holes: hs.map(q => circle(q, f.r)), ppu: 120, draw: (g, p, W) => { g.textAlign = 'center'; g.fillStyle = C.ink; g.font = `${B} ${0.3 * p}px ${SERIF}`; g.fillText(c.name.toUpperCase(), W / 2, 0.42 * p); } });
+      const pc2 = piece(sd, { x: f.x0, v0: c.v, dir: -1, H: c.h, x0: f.x0, x1: f.x0 + f.w, color: cols[i] }); pieces.push(pc2); return pc2;
+    });
+    const tk = f.token, tx = f.x0 + (f.hole[0] + f.stop[0]) / 2 - tk.w / 2;
+    const token = standee(tk.w, tk.h, { color: T.accent, ppu: 170, draw: (g, p, W) => { g.textAlign = 'center'; g.fillStyle = '#f6eedc'; g.font = `400 ${0.36 * p}px ${DISPLAY}`; g.fillText('HARM', W / 2, 0.55 * p); } });
+    const tp = piece(token, { x: tx, v0: tk.v, dir: -1, H: tk.h, x0: tx, x1: tx + tk.w, color: T.accent }); pieces.push(tp);
+    const at = (pc2, x, y, z) => { const o = new THREE.Object3D(); o.position.set(x, y, z); pc2.fold.add(o); return o; };
+    const last = placed[placed.length - 1];
+    strings.push(new SlackString([at(tp, f.x0 + f.hole[0] - tx, f.hole[1], -0.03), at(last, f.hole[0], f.hole[1], -0.2)], { r: 0.035, color: T.string, extra: 1.0002 }));
+    strings.push(new SlackString([at(tp, f.x0 + f.stop[0] - tx, f.stop[1], -0.03), at(placed[1], f.stop[0], f.stop[1], 0.02)], { r: 0.025, color: T.twine, extra: 1.0002 }));
+    return { pieces, strings };
   },
 };
 

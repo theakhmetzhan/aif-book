@@ -10,7 +10,7 @@ import { T } from './theme.js';
 import { clothFill, goldGradient } from './paper.js';
 import { Page } from './typeset.js';
 
-export const PW = 14, PH = 20, BW = 14.3, BH = 20.6, BT = 0.2, ST = 0.13;
+export const PW = 14, PH = 20, BW = 14.3, BH = 20.6, BT = 0.2, ST = 0.05;
 const N = SHEETS.length, NI = N - 2;
 const HINGE = 0; // boards hinge at the spine edge of the block and overhang it by a square elsewhere
 export const G0 = 0.07; // pages start this far from the hinge axis, so a turning page's corners never enter either stack
@@ -18,7 +18,7 @@ const REST = 0.01; // a sheet within this angle of flat lies on its stack
 const STRIP = 0.2, CROWN = 0.3, LINING = 0.07, CLOTH = 0.012; // the spine strip stands this far off the block, is rounded this much when shut, is this thick, and its cloth this thick off the desk
 const EASE = 0.7, NECK = 0.34, BIND = 0.1; // how far a leaf runs on past its sheet's end before it bends; how far a top page stops short of the crease; how far above the cloth the crease ends
 const LEAVES = 0.5; // the paper-edge texture repeats every this many cm
-const RUN = 0.42; // the thicker stack's top page reaches the crease in this much run per unit of height: steep, as card curves into a gutter
+const RUN = 0.15; // the thicker stack's top page reaches the crease in this much run per unit of height: steep, as card curves into a gutter
 const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const glide = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * t * (t * (6 * t - 15) + 10); }; // sstep with no jolt where it starts or stops
 const turnEase = t => t - Math.sin(2 * Math.PI * t) / (2 * Math.PI); // eases in and out of each turn
