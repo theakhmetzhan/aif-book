@@ -12,7 +12,7 @@ const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 // Levels going into each place below.
 const LEVEL = {
   rain: dB(-10), drops: dB(-33),
-  tick: dB(-17),
+  tick: dB(-9),
   page: dB(-13),
   thunder: dB(-9), reverb: dB(-11),
 };
