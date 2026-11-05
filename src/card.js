@@ -12,7 +12,7 @@ export const CARD_TEXT = {
   author: AUTHOR,
   team: 'Individual project',
   course: 'AI Fundamentals (AIF1303) · QAIRU · 2026',
-  annotation: 'Every AI system works a case: it gathers evidence, follows leads and acts on the best explanation it has. In ten cases, from agents and search to probability, learning and language models, paper exhibits stand up from the pages of a casebook on a detective’s desk at night; lean over the book to read the full explanation.',
+  annotation: 'A detective’s casebook that explains the main ideas of AI in ten cases, from agents and search to probability, learning and language models. Paper exhibits stand up from its pages on a desk at night. Lean over the book to read the full explanation.',
   cta: 'Scan to open the casebook',
   url: BOOK_URL,
 };
