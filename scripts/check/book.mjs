@@ -66,7 +66,7 @@ const r=await p.evaluate(()=>{
 });
 // the owner's top view: what lies between the two surfaces of a first or last spread must render as paper, not as a dark strip. Measured in the rendered frame
 r.gutterTone=await p.evaluate(async()=>{ const B=__book, cam=B.cam, V=cam.position.constructor, gl=B.renderer.getContext(), S=B.book.sheets, tick=()=>new Promise(k=>requestAnimationFrame(()=>requestAnimationFrame(()=>requestAnimationFrame(k)))); let worst=1e9;
-  B.rig.L.box.min.set(-1e3,-1e3,-1e3); B.rig.L.box.max.set(1e3,1e3,1e3); B.rig.L.rMin=1; B.rig.L.phiMin=0.001; B.rig.L.thetaMin=-7; B.rig.L.thetaMax=7;
+  B.rig.L.box.min.set(-1e3,-1e3,-1e3); B.rig.L.box.max.set(1e3,1e3,1e3); B.rig.L.rMin=1; B.rig.L.phiMin=0.001; B.rig.L.wall=-1e3;
   for(const [q,leaf,board] of [[1,S[1],S[0]],[7,S[6],S[7]]]){ B.set(q); B.rig.lookFrom(new V(-1.584,56.06,5.025),new V(-2.082,-1.124,1.352)); B.room.freeze=true; B.renderer.shadowMap.needsUpdate=true; await tick(); await tick();
     const w=gl.drawingBufferWidth,h=gl.drawingBufferHeight,px=new Uint8Array(w*h*4); gl.readPixels(0,0,w,h,gl.RGBA,gl.UNSIGNED_BYTE,px); const g=B.book.group.position.x;
     const lum=x=>{ const v=new V(x,2,0).project(cam),i=Math.round((v.x+1)/2*w),j=Math.round((v.y+1)/2*h),o=(j*w+i)*4; return .3*px[o]+.59*px[o+1]+.11*px[o+2]; }, med=a=>a.slice().sort((p,q)=>p-q)[a.length>>1];

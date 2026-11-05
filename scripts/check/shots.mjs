@@ -42,7 +42,7 @@ await pg.addStyleTag({ content: '.hint{display:none!important}' });
 const frame = () => pg.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r)))));
 const look = (p, c, zoom, exp) => pg.evaluate((p, c, zoom, exp, W, H, K) => {
   const B = __book, cam = B.cam, V = cam.position.constructor; B.set(p); B.book.set(p, 2); B.book.group.position.x = -B.book.centerX(p); B.book.group.updateMatrixWorld(true);
-  B.rig.L.box.min.set(-1e3, -1e3, -1e3); B.rig.L.box.max.set(1e3, 1e3, 1e3); B.rig.L.rMin = 1; B.rig.L.thetaMin = -7; B.rig.L.thetaMax = 7; B.rig.L.phiMax = 3; B.rig.L.phiMin = 0.001;
+  B.rig.L.box.min.set(-1e3, -1e3, -1e3); B.rig.L.box.max.set(1e3, 1e3, 1e3); B.rig.L.rMin = 1; B.rig.L.wall = -1e3; B.rig.L.phiMax = 3; B.rig.L.phiMin = 0.001;
   B.scene.children.forEach(o => { if (o.position.z > 15 && Math.abs(o.position.x) < 20) o.visible = !c[6]; });
   B.rig.lookFrom(new V(c[0], c[1], c[2]), new V(c[3], c[4], c[5])); B.rig.update(1); cam.clearViewOffset(); cam.updateProjectionMatrix(); cam.updateMatrixWorld(true);
   if (zoom) { // the crop: the spine's middle, at the end of the book nearest this camera

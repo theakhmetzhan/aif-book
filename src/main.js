@@ -27,7 +27,7 @@ async function fonts() {
 
 function fail(msg) {
   const L = document.querySelector('#loader'); document.body.classList.remove('ready');
-  L.innerHTML = `<div class="t">EVIDENCE</div><p class="err" role="alert">${msg}</p><button class="retry" type="button">Reload</button>`;
+  L.innerHTML = `<p class="err" role="alert">${msg}</p><button class="retry" type="button">Reload</button>`;
   L.querySelector('.retry').onclick = () => location.reload();
 }
 
@@ -238,7 +238,7 @@ async function start() {
     first = false;
     requestAnimationFrame(frame);
   }
-  // what only shows later goes to the GPU now, behind the loader, so no spread stops mid-turn for its first upload. Once it has, a canvas or bitmap is only a second copy, which a phone cannot spare
+  // what only shows later goes to the GPU now, behind the black, so no spread stops mid-turn for its first upload. Once it has, a canvas or bitmap is only a second copy, which a phone cannot spare
   const maps = new Map(); scene.traverse(o => { for (const m of [o.material].flat()) if (m) for (const v of Object.values(m)) if (v?.isTexture) maps.set(v.source, [...(maps.get(v.source) ?? []), v]); });
   maps.forEach((ts, s) => { ts.forEach(t => renderer.initTexture(t)); if (s.data?.getContext) s.data.width = s.data.height = 0; else s.data?.close?.(); });
   // and one rehearsal with every pop-up out, so the first sight of anything builds no shader and no buffer: the first frame puts them away again
@@ -247,5 +247,7 @@ async function start() {
   window.__book = { audio, cam, rig, renderer, scene, book, room, goView, boardBox: { z: BOARD.z, xs: [-BOARD.w / 2, BOARD.w / 2], ys: [BOARD.y0, BOARD.y0 + BOARD.h] }, set: pp => { target = p = pp; pv = 0; }, get p() { return p; }, get target() { return target; }, get view() { return view; } };
   document.body.classList.add('ready');
   requestAnimationFrame(frame);
+  // a repeat visit, or one with no network, comes from the worker's copy; the site is small enough to keep whole
+  if (import.meta.env.MODE === 'production' && 'serviceWorker' in navigator) navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js').catch(e => console.info('[sw]', e?.message));
 }
 start().catch(e => { console.error(e); fail('Something went wrong while setting up the desk. Try reloading the page.'); });
