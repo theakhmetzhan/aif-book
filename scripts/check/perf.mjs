@@ -4,7 +4,7 @@
 // `peak` is the number to compare builds by: Chromium with the display's limit off, dragging, frames as fast as they come, which holds to about 1% from run to run.
 // Then what a route cannot show, on the phone only: `read` goes through every spread and back and compares each first showing with the second; `bar` slides an address bar; `pace` holds frames to a slow device's rate and watches the resolution answer.
 // Only what does not depend on this machine can fail the check: draws, uploads, shadow maps drawn while the camera moves, copies held in memory, buffers remade, the resolution's answers. The same limits run against any build, so an older one is the control: it has to fail.
-// usage: URL=http://localhost:5181/aif-book/ node scripts/check/perf.mjs [out.json] [only=WebKit,Chromium] [pass=time,count,gpu,peak,read,bar,pace] [against=before.json]
+// Needs: npx playwright-core install webkit. usage: URL=http://localhost:5181/aif-book/ node scripts/check/perf.mjs [out.json] [only=WebKit,Chromium] [pass=time,count,gpu,peak,read,bar,pace] [against=before.json]
 import { webkit, chromium } from 'playwright-core';
 import fs from 'fs';
 import { execSync } from 'child_process';
